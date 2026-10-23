@@ -4,12 +4,20 @@ Todos los cambios notables en este proyecto se documentarán en este archivo.
 
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
+## [0.3.0] - 2026-10-23
+
+### Agregado
+- **Servicio Acquirer Mock Independiente (Task 02):** Implementación de simulador HTTP bancario autónomo en Go nativo (`net/http`) con su propio `go.mod`, reproduciendo 6 comportamientos deterministas de tarjeta (aprobaciones `00`, rechazos por fondos `51` / `insufficient_funds`, caídas 503 persistentes e intermitentes, y timeouts de red con y sin cobro previo).
+- **Endpoint de Reconciliación On-Demand:** Soporte para consulta de transacciones vía `GET /authorizations/{reference_id}` para recuperar el estado ante pérdidas de respuesta por timeout de red y prevenir doble cobro.
+- **Almacén en Memoria Thread-Safe:** Implementación de `MemoryStore` concurrente con `sync.RWMutex` para conteo de reintentos y consulta de autorizaciones.
+- **Protección PCI-DSS:** Enmascaramiento automático de credenciales sensibles (PAN y CVV) mediante `slog.LogValuer` y `fmt.Stringer`.
+- **Documentación y Guías Operativas:** Creación de `acquirer-mock/README.md`, `payments-api/README.md` y `AGENTS.md` con las directrices de arquitectura, estándares de ingeniería y flujo de desarrollo para agentes y colaboradores.
 
 ## [0.2.0] - 2026-10-23
 
 ### Agregado
 - **Migraciones Iniciales y DDL PostgreSQL (Task 01):** Creación de scripts SQL versionados (`000001_init_schema` y `000002_seed_merchants`) gestionados con `golang-migrate`, integrando `payload_hash`, `updated_at`, `correlation_id`, `ON DELETE CASCADE` y suite de tests de integración para invariantes de concurrencia.
-- **Refinamiento de Estructura de Paquetes:** Adopción de paquete plano `domain/` (entidades y value objects sin subcarpetas innecesarias) y colocalización de casos de uso por rebanadas verticales (*Vertical Slices*) en `internal/app/` (`processpayment/`, `getpayment/`, `listpayments/`).
+- **Refinamiento de Estructura de Paquetes:** Adopción de paquete plano `domain/` (entidades y value objects sin subcarpetas innecesarias) y colocalización de casos de uso en `internal/app/` (`processpayment/`, `getpayment/`, `listpayments/`).
 
 ## [0.1.0] - 2026-10-23
 
