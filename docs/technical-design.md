@@ -177,8 +177,12 @@ haulmer/
 │   ├── cmd/
 │   │   └── api/main.go               # Punto de entrada / composition root
 │   ├── internal/
-│   │   ├── domain/                   # Entidades, Value Objects, Estados, Reglas, Errores
-│   │   ├── app/                      # Casos de uso y puertos de la aplicación
+│   │   ├── domain/                   # Paquete plano: merchant.go, payment_intent.go, transaction.go,
+│   │   │                             # card.go, amount.go, status.go, errors.go
+│   │   ├── app/                      # Colocalización por Caso de Uso (Vertical Slices):
+│   │   │   ├── processpayment/       # usecase.go, dto.go, ports.go, usecase_test.go
+│   │   │   ├── getpayment/           # usecase.go, dto.go, ports.go, usecase_test.go
+│   │   │   └── listpayments/         # usecase.go, dto.go, ports.go, usecase_test.go
 │   │   └── adapters/
 │   │       ├── httpapi/              # Handlers HTTP, DTOs, Middlewares, RFC 9457
 │   │       ├── postgres/             # Repositorios SQL y gestión de transacciones

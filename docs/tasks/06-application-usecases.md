@@ -13,21 +13,27 @@ Implementar la capa de aplicación que orquesta el flujo completo de cobro sínc
 ---
 
 ## 2. Archivos Afectados
-- `crear`: `payments-api/internal/app/dto/payment.go`
-- `crear`: `payments-api/internal/app/usecase/process_payment.go`
-- `crear`: `payments-api/internal/app/usecase/get_payment.go`
-- `crear`: `payments-api/internal/app/usecase/list_payments.go`
-- `crear`: `payments-api/internal/app/usecase/process_payment_test.go`
-- `crear`: `payments-api/internal/app/usecase/get_payment_test.go`
+- `crear`: `payments-api/internal/app/processpayment/usecase.go`
+- `crear`: `payments-api/internal/app/processpayment/dto.go`
+- `crear`: `payments-api/internal/app/processpayment/ports.go`
+- `crear`: `payments-api/internal/app/processpayment/usecase_test.go`
+- `crear`: `payments-api/internal/app/getpayment/usecase.go`
+- `crear`: `payments-api/internal/app/getpayment/dto.go`
+- `crear`: `payments-api/internal/app/getpayment/ports.go`
+- `crear`: `payments-api/internal/app/getpayment/usecase_test.go`
+- `crear`: `payments-api/internal/app/listpayments/usecase.go`
+- `crear`: `payments-api/internal/app/listpayments/dto.go`
+- `crear`: `payments-api/internal/app/listpayments/ports.go`
+- `crear`: `payments-api/internal/app/listpayments/usecase_test.go`
 
 ---
 
 ## 3. Especificación Técnica Detallada
 
 ### 3.1 Flujo de `ProcessPaymentUseCase`
-1. **Validación del Comercio:** Consultar `MerchantRepository`. Si el comercio no existe o está inactivo (`status != 'ACTIVE'`), persistir intento como `DECLINED` con `decline_source = 'INTERNAL'` y motivo `merchant_not_allowed`, retornando error de negocio.
+1. **Validación del Comercio:** Consultar `MerchantRepository`. Si el comercio no existe o está inactivo (`status != 'ACTIVE'`), rechazar inmediatamente en el umbral de la API con código `401/422` sin tocar la base de datos (principio cero basura).
 2. **Protección de Sobrecarga:** Verificar `ConcurrencyLimiter.TryAcquire()`. Si está lleno, retornar `ErrServiceOverloaded` con sugerencia `Retry-After: 2`.
-3. **Cálculo de Integridad:** Calcular `request_hash = SHA256(merchant_id + order_reference + amount + currency + card_bin + card_last4)`.
+3. **Cálculo de Integridad:** Calcular `payload_hash = SHA256(merchant_id + order_reference + amount + currency + card_bin + card_last4)`.
 4. **Verificación de Idempotencia:**
    - Si la clave ya existe para el comercio:
      - Si `stored_hash != incoming_hash` $\rightarrow$ Retornar `ErrIdempotencyKeyReused` (código HTTP 422/409).

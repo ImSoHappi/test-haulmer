@@ -5,6 +5,12 @@ Todos los cambios notables en este proyecto se documentarán en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
+## [0.2.0] - 2026-10-23
+
+### Agregado
+- **Migraciones Iniciales y DDL PostgreSQL (Task 01):** Creación de scripts SQL versionados (`000001_init_schema` y `000002_seed_merchants`) gestionados con `golang-migrate`, integrando `payload_hash`, `updated_at`, `correlation_id`, `ON DELETE CASCADE` y suite de tests de integración para invariantes de concurrencia.
+- **Refinamiento de Estructura de Paquetes:** Adopción de paquete plano `domain/` (entidades y value objects sin subcarpetas innecesarias) y colocalización de casos de uso por rebanadas verticales (*Vertical Slices*) en `internal/app/` (`processpayment/`, `getpayment/`, `listpayments/`).
+
 ## [0.1.0] - 2026-10-23
 
 ### Agregado
