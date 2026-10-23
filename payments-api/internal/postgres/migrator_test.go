@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ImSoHappi/test-haulmer/payments-api/internal/platform/postgres"
+	"github.com/ImSoHappi/test-haulmer/payments-api/internal/postgres"
 )
 
 func getTestDatabaseURL() string {
