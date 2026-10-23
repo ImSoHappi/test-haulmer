@@ -13,18 +13,17 @@ Modelar el hexágono interior (núcleo del dominio) en Go puro, completamente de
 ---
 
 ## 2. Archivos Afectados
-- `crear`: `payments-api/go.mod`
-- `crear`: `payments-api/internal/domain/entity/payment_intent.go`
-- `crear`: `payments-api/internal/domain/entity/transaction.go`
-- `crear`: `payments-api/internal/domain/entity/transaction_event.go`
-- `crear`: `payments-api/internal/domain/entity/merchant.go`
-- `crear`: `payments-api/internal/domain/valueobject/amount.go`
-- `crear`: `payments-api/internal/domain/valueobject/card.go`
-- `crear`: `payments-api/internal/domain/valueobject/status.go`
+- `crear`: `payments-api/internal/domain/merchant.go`
+- `crear`: `payments-api/internal/domain/payment_intent.go`
+- `crear`: `payments-api/internal/domain/transaction.go`
+- `crear`: `payments-api/internal/domain/transaction_event.go`
+- `crear`: `payments-api/internal/domain/amount.go`
+- `crear`: `payments-api/internal/domain/card.go`
+- `crear`: `payments-api/internal/domain/status.go`
 - `crear`: `payments-api/internal/domain/errors.go`
-- `crear`: `payments-api/internal/domain/valueobject/card_test.go`
-- `crear`: `payments-api/internal/domain/valueobject/amount_test.go`
-- `crear`: `payments-api/internal/domain/valueobject/status_test.go`
+- `crear`: `payments-api/internal/domain/card_test.go`
+- `crear`: `payments-api/internal/domain/amount_test.go`
+- `crear`: `payments-api/internal/domain/status_test.go`
 
 ---
 
