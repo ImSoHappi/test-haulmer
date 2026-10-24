@@ -56,13 +56,13 @@ func TestMigrator_LifecycleAndConstraints(t *testing.T) {
 	// Step 3: Verify Seeded Merchants
 	t.Run("Verify_SeededMerchants", func(t *testing.T) {
 		var activeName, activeStatus string
-		err := db.QueryRowContext(ctx, "SELECT name, status FROM merchants WHERE id = 'm_1001'").Scan(&activeName, &activeStatus)
+		err := db.QueryRowContext(ctx, "SELECT name, status FROM merchants WHERE id = '1001'").Scan(&activeName, &activeStatus)
 		require.NoError(t, err)
 		assert.Equal(t, "Comercio Activo Principal", activeName)
 		assert.Equal(t, "ACTIVE", activeStatus)
 
 		var inactiveStatus string
-		err = db.QueryRowContext(ctx, "SELECT status FROM merchants WHERE id = 'm_1002'").Scan(&inactiveStatus)
+		err = db.QueryRowContext(ctx, "SELECT status FROM merchants WHERE id = '1002'").Scan(&inactiveStatus)
 		require.NoError(t, err)
 		assert.Equal(t, "INACTIVE", inactiveStatus)
 	})
@@ -72,14 +72,14 @@ func TestMigrator_LifecycleAndConstraints(t *testing.T) {
 		intentID := uuid.New()
 		_, err := db.ExecContext(ctx, `
 			INSERT INTO payment_intents (id, merchant_id, order_reference, amount, currency, metadata, correlation_id)
-			VALUES ($1, 'm_1001', 'ORD-TEST-001', 10000, 'CLP', '{}', 'corr-1');
+			VALUES ($1, '1001', 'ORD-TEST-001', 10000, 'CLP', '{}', 'corr-1');
 		`, intentID)
 		require.NoError(t, err)
 
 		txID1 := uuid.New()
 		_, err = db.ExecContext(ctx, `
 			INSERT INTO transactions (id, payment_intent_id, merchant_id, idempotency_key, payload_hash, status, card_bin, card_last4, correlation_id)
-			VALUES ($1, $2, 'm_1001', 'idemp-key-123', 'hash123', 'PROCESSING', '411111', '1111', 'corr-1');
+			VALUES ($1, $2, '1001', 'idemp-key-123', 'hash123', 'PROCESSING', '411111', '1111', 'corr-1');
 		`, txID1, intentID)
 		require.NoError(t, err)
 
@@ -87,7 +87,7 @@ func TestMigrator_LifecycleAndConstraints(t *testing.T) {
 		txID2 := uuid.New()
 		_, err = db.ExecContext(ctx, `
 			INSERT INTO transactions (id, payment_intent_id, merchant_id, idempotency_key, payload_hash, status, card_bin, card_last4, correlation_id)
-			VALUES ($1, $2, 'm_1001', 'idemp-key-123', 'hash123', 'PROCESSING', '411111', '1111', 'corr-2');
+			VALUES ($1, $2, '1001', 'idemp-key-123', 'hash123', 'PROCESSING', '411111', '1111', 'corr-2');
 		`, txID2, intentID)
 		require.Error(t, err, "should fail on duplicate idempotency key")
 
@@ -105,7 +105,7 @@ func TestMigrator_LifecycleAndConstraints(t *testing.T) {
 		intentID := uuid.New()
 		_, err := db.ExecContext(ctx, `
 			INSERT INTO payment_intents (id, merchant_id, order_reference, amount, currency, metadata, correlation_id)
-			VALUES ($1, 'm_1001', 'ORD-TEST-002', 15000, 'CLP', '{}', 'corr-app-1');
+			VALUES ($1, '1001', 'ORD-TEST-002', 15000, 'CLP', '{}', 'corr-app-1');
 		`, intentID)
 		require.NoError(t, err)
 
@@ -113,7 +113,7 @@ func TestMigrator_LifecycleAndConstraints(t *testing.T) {
 		txID1 := uuid.New()
 		_, err = db.ExecContext(ctx, `
 			INSERT INTO transactions (id, payment_intent_id, merchant_id, idempotency_key, payload_hash, status, card_bin, card_last4, correlation_id)
-			VALUES ($1, $2, 'm_1001', 'idemp-app-1', 'hash-app-1', 'APPROVED', '411111', '1111', 'corr-app-1');
+			VALUES ($1, $2, '1001', 'idemp-app-1', 'hash-app-1', 'APPROVED', '411111', '1111', 'corr-app-1');
 		`, txID1, intentID)
 		require.NoError(t, err)
 
@@ -121,7 +121,7 @@ func TestMigrator_LifecycleAndConstraints(t *testing.T) {
 		txID2 := uuid.New()
 		_, err = db.ExecContext(ctx, `
 			INSERT INTO transactions (id, payment_intent_id, merchant_id, idempotency_key, payload_hash, status, card_bin, card_last4, correlation_id)
-			VALUES ($1, $2, 'm_1001', 'idemp-app-2', 'hash-app-2', 'APPROVED', '411111', '2222', 'corr-app-2');
+			VALUES ($1, $2, '1001', 'idemp-app-2', 'hash-app-2', 'APPROVED', '411111', '2222', 'corr-app-2');
 		`, txID2, intentID)
 		require.Error(t, err, "should fail on second approved transaction for the same intent")
 
@@ -139,7 +139,7 @@ func TestMigrator_LifecycleAndConstraints(t *testing.T) {
 		intentID := uuid.New()
 		_, err := db.ExecContext(ctx, `
 			INSERT INTO payment_intents (id, merchant_id, order_reference, amount, currency, metadata, correlation_id)
-			VALUES ($1, 'm_1001', 'ORD-TEST-003', 20000, 'CLP', '{}', 'corr-act-1');
+			VALUES ($1, '1001', 'ORD-TEST-003', 20000, 'CLP', '{}', 'corr-act-1');
 		`, intentID)
 		require.NoError(t, err)
 
@@ -147,7 +147,7 @@ func TestMigrator_LifecycleAndConstraints(t *testing.T) {
 		txID1 := uuid.New()
 		_, err = db.ExecContext(ctx, `
 			INSERT INTO transactions (id, payment_intent_id, merchant_id, idempotency_key, payload_hash, status, card_bin, card_last4, correlation_id)
-			VALUES ($1, $2, 'm_1001', 'idemp-act-1', 'hash-act-1', 'PROCESSING', '411111', '1111', 'corr-act-1');
+			VALUES ($1, $2, '1001', 'idemp-act-1', 'hash-act-1', 'PROCESSING', '411111', '1111', 'corr-act-1');
 		`, txID1, intentID)
 		require.NoError(t, err)
 
@@ -155,7 +155,7 @@ func TestMigrator_LifecycleAndConstraints(t *testing.T) {
 		txID2 := uuid.New()
 		_, err = db.ExecContext(ctx, `
 			INSERT INTO transactions (id, payment_intent_id, merchant_id, idempotency_key, payload_hash, status, card_bin, card_last4, correlation_id)
-			VALUES ($1, $2, 'm_1001', 'idemp-act-2', 'hash-act-2', 'PROCESSING', '411111', '2222', 'corr-act-2');
+			VALUES ($1, $2, '1001', 'idemp-act-2', 'hash-act-2', 'PROCESSING', '411111', '2222', 'corr-act-2');
 		`, txID2, intentID)
 		require.Error(t, err, "should fail on second concurrent active transaction")
 

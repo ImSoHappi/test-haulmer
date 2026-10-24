@@ -78,7 +78,7 @@ func TestTransaction_MarkApproved(t *testing.T) {
 	tx := domain.NewTransaction(
 		uuid.New(),
 		uuid.New(),
-		"m_1001",
+		"1001",
 		"idem-123",
 		"hash-sha256",
 		"424242",
@@ -113,7 +113,7 @@ func TestTransaction_MarkDeclined(t *testing.T) {
 	tx := domain.NewTransaction(
 		uuid.New(),
 		uuid.New(),
-		"m_1001",
+		"1001",
 		"idem-123",
 		"hash-sha256",
 		"400000",
@@ -141,7 +141,7 @@ func TestTransaction_MarkFailed(t *testing.T) {
 	tx := domain.NewTransaction(
 		uuid.New(),
 		uuid.New(),
-		"m_1001",
+		"1001",
 		"idem-123",
 		"hash-sha256",
 		"400000",
@@ -171,7 +171,7 @@ func TestPaymentIntent_Creation(t *testing.T) {
 	now := time.Now().UTC()
 	intent, err := domain.NewPaymentIntent(
 		uuid.New(),
-		"m_1001",
+		"1001",
 		"order-999",
 		amt,
 		domain.CurrencyCLP,
@@ -180,7 +180,7 @@ func TestPaymentIntent_Creation(t *testing.T) {
 		now,
 	)
 	require.NoError(t, err)
-	assert.Equal(t, "m_1001", intent.MerchantID)
+	assert.Equal(t, "1001", intent.MerchantID)
 	assert.Equal(t, "order-999", intent.OrderReference)
 	assert.Equal(t, int64(25990), intent.Amount.Int64())
 	assert.Equal(t, domain.CurrencyCLP, intent.Currency)

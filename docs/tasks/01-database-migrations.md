@@ -84,8 +84,8 @@ Definir y versionar el esquema DDL completo de PostgreSQL que actúa como la fue
 - **Nombres y Trazabilidad:** `payload_hash TEXT NOT NULL` en `transactions` y campos `updated_at` y `correlation_id` en `payment_intents`.
 
 ### 3.3 Datos Semilla (`merchants`)
-- `m_1001`: "Comercio Activo Principal" (`status = 'ACTIVE'`)
-- `m_1002`: "Comercio Inactivo Test" (`status = 'INACTIVE'`)
+- `1001`: "Comercio Activo Principal" (`status = 'ACTIVE'`)
+- `1002`: "Comercio Inactivo Test" (`status = 'INACTIVE'`)
 
 ---
 
@@ -100,7 +100,7 @@ Definir y versionar el esquema DDL completo de PostgreSQL que actúa como la fue
 - [x] Los scripts SQL se ejecutan limpiamente en orden (`up.sql`).
 - [x] La migración inversa (`down.sql`) elimina las tablas limpiamente sin errores de dependencias.
 - [x] Los índices parciales `uq_tx_idempotency`, `uq_tx_one_approved` y `uq_tx_one_active` están creados.
-- [x] Los comercios semilla `m_1001` y `m_1002` quedan insertados.
+- [x] Los comercios semilla `1001` y `1002` quedan insertados.
 - [x] Layout limpio en `internal/postgres/` sin capas artificiales.
 
 ---

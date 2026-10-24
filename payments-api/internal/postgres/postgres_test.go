@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ImSoHappi/test-haulmer/payments-api/internal/app/listpayments"
 	"github.com/ImSoHappi/test-haulmer/payments-api/internal/domain"
+	"github.com/ImSoHappi/test-haulmer/payments-api/internal/payment"
 	"github.com/ImSoHappi/test-haulmer/payments-api/internal/postgres"
 )
 
@@ -46,22 +46,22 @@ func TestRepository_GetMerchantByID(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	// Case 1: Active Merchant (m_1001)
-	mActive, err := repo.GetMerchantByID(ctx, "m_1001")
+	// Case 1: Active Merchant (1001)
+	mActive, err := repo.GetMerchantByID(ctx, "1001")
 	require.NoError(t, err)
-	assert.Equal(t, "m_1001", mActive.ID)
+	assert.Equal(t, "1001", mActive.ID)
 	assert.Equal(t, domain.MerchantStatusActive, mActive.Status)
 	assert.True(t, mActive.IsActive())
 
-	// Case 2: Inactive Merchant (m_1002)
-	mInactive, err := repo.GetMerchantByID(ctx, "m_1002")
+	// Case 2: Inactive Merchant (1002)
+	mInactive, err := repo.GetMerchantByID(ctx, "1002")
 	require.NoError(t, err)
-	assert.Equal(t, "m_1002", mInactive.ID)
+	assert.Equal(t, "1002", mInactive.ID)
 	assert.Equal(t, domain.MerchantStatusInactive, mInactive.Status)
 	assert.False(t, mInactive.IsActive())
 
 	// Case 3: Non-existent Merchant
-	_, err = repo.GetMerchantByID(ctx, "m_non_existent")
+	_, err = repo.GetMerchantByID(ctx, "9999")
 	assert.ErrorIs(t, err, domain.ErrMerchantNotFound)
 }
 
@@ -82,7 +82,7 @@ func TestRepository_AtomicPaymentFlow(t *testing.T) {
 
 	intent, err := domain.NewPaymentIntent(
 		intentID,
-		"m_1001",
+		"1001",
 		orderRef,
 		amount,
 		domain.CurrencyCLP,
@@ -92,11 +92,11 @@ func TestRepository_AtomicPaymentFlow(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	payloadHash := postgres.ComputePayloadHash("m_1001", orderRef, 25990, "CLP", "424242", "4242", 12, 2028)
+	payloadHash := postgres.ComputePayloadHash("1001", orderRef, 25990, "CLP", "424242", "4242", 12, 2028)
 	txRecord := domain.NewTransaction(
 		txID,
 		intentID,
-		"m_1001",
+		"1001",
 		idemKey,
 		payloadHash,
 		"424242",
@@ -129,7 +129,7 @@ func TestRepository_AtomicPaymentFlow(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify reads outside the transaction
-	foundIntent, err := repo.GetPaymentIntentByOrderRef(ctx, "m_1001", orderRef)
+	foundIntent, err := repo.GetPaymentIntentByOrderRef(ctx, "1001", orderRef)
 	require.NoError(t, err)
 	assert.Equal(t, intentID, foundIntent.ID)
 	assert.Equal(t, int64(25990), foundIntent.Amount.Int64())
@@ -158,16 +158,16 @@ func TestRepository_ConstraintMappings_23505(t *testing.T) {
 	corrID := "corr-constraint-1"
 
 	amount, _ := domain.NewAmount(15000)
-	intent, _ := domain.NewPaymentIntent(intentID, "m_1001", orderRef, amount, domain.CurrencyCLP, nil, corrID, now)
+	intent, _ := domain.NewPaymentIntent(intentID, "1001", orderRef, amount, domain.CurrencyCLP, nil, corrID, now)
 	err := repo.CreatePaymentIntent(ctx, nil, intent)
 	require.NoError(t, err)
 
-	tx1 := domain.NewTransaction(uuid.New(), intentID, "m_1001", idemKey, "hash-1", "424242", "4242", corrID, now)
+	tx1 := domain.NewTransaction(uuid.New(), intentID, "1001", idemKey, "hash-1", "424242", "4242", corrID, now)
 	err = repo.CreateTransaction(ctx, nil, tx1)
 	require.NoError(t, err)
 
 	// Test 1: Idempotency conflict (uq_tx_idempotency)
-	txDuplicateIdem := domain.NewTransaction(uuid.New(), intentID, "m_1001", idemKey, "hash-2", "424242", "4242", corrID, now)
+	txDuplicateIdem := domain.NewTransaction(uuid.New(), intentID, "1001", idemKey, "hash-2", "424242", "4242", corrID, now)
 	err = repo.CreateTransaction(ctx, nil, txDuplicateIdem)
 	assert.ErrorIs(t, err, domain.ErrIdempotencyConflict, "must map uq_tx_idempotency to ErrIdempotencyConflict")
 
@@ -181,7 +181,7 @@ func TestRepository_ConstraintMappings_23505(t *testing.T) {
 	assert.True(t, updated)
 
 	// Attempt to insert another transaction as APPROVED for the same intent
-	tx2 := domain.NewTransaction(uuid.New(), intentID, "m_1001", "idem-new-1", "hash-3", "424242", "4242", corrID, now)
+	tx2 := domain.NewTransaction(uuid.New(), intentID, "1001", "idem-new-1", "hash-3", "424242", "4242", corrID, now)
 	tx2.Status = domain.StatusApproved // Force status to test physical DB constraint
 	err = repo.CreateTransaction(ctx, nil, tx2)
 	assert.ErrorIs(t, err, domain.ErrIntentAlreadyApproved, "must map uq_tx_one_approved to ErrIntentAlreadyApproved")
@@ -189,16 +189,16 @@ func TestRepository_ConstraintMappings_23505(t *testing.T) {
 	// Test 3: Single active per intent (uq_tx_one_active)
 	// Create another intent
 	intentID2 := uuid.New()
-	intent2, _ := domain.NewPaymentIntent(intentID2, "m_1001", "ord-active-2", amount, domain.CurrencyCLP, nil, corrID, now)
+	intent2, _ := domain.NewPaymentIntent(intentID2, "1001", "ord-active-2", amount, domain.CurrencyCLP, nil, corrID, now)
 	_ = repo.CreatePaymentIntent(ctx, nil, intent2)
 
-	txActive1 := domain.NewTransaction(uuid.New(), intentID2, "m_1001", "idem-act-1", "hash-4", "424242", "4242", corrID, now)
+	txActive1 := domain.NewTransaction(uuid.New(), intentID2, "1001", "idem-act-1", "hash-4", "424242", "4242", corrID, now)
 	txActive1.Status = domain.StatusProcessing
 	err = repo.CreateTransaction(ctx, nil, txActive1)
 	require.NoError(t, err)
 
 	// Try to insert a second in-flight active transaction for intent2
-	txActive2 := domain.NewTransaction(uuid.New(), intentID2, "m_1001", "idem-act-2", "hash-5", "424242", "4242", corrID, now)
+	txActive2 := domain.NewTransaction(uuid.New(), intentID2, "1001", "idem-act-2", "hash-5", "424242", "4242", corrID, now)
 	txActive2.Status = domain.StatusProcessing
 	err = repo.CreateTransaction(ctx, nil, txActive2)
 	assert.ErrorIs(t, err, domain.ErrActiveTransactionExists, "must map uq_tx_one_active to ErrActiveTransactionExists")
@@ -216,10 +216,10 @@ func TestRepository_OptimisticLocking(t *testing.T) {
 	idemKey := "idem-lock-" + uuid.New().String()[:8]
 
 	amount, _ := domain.NewAmount(9990)
-	intent, _ := domain.NewPaymentIntent(intentID, "m_1001", orderRef, amount, domain.CurrencyCLP, nil, "corr-lock", now)
+	intent, _ := domain.NewPaymentIntent(intentID, "1001", orderRef, amount, domain.CurrencyCLP, nil, "corr-lock", now)
 	_ = repo.CreatePaymentIntent(ctx, nil, intent)
 
-	txRecord := domain.NewTransaction(txID, intentID, "m_1001", idemKey, "hash-lock", "424242", "4242", "corr-lock", now)
+	txRecord := domain.NewTransaction(txID, intentID, "1001", idemKey, "hash-lock", "424242", "4242", "corr-lock", now)
 	_ = repo.CreateTransaction(ctx, nil, txRecord)
 
 	// Step 1: Legal update from PENDING to PROCESSING
@@ -247,21 +247,21 @@ func TestRepository_GetTransactionByIdempotencyKey(t *testing.T) {
 	idemKey := "key-lookup-" + uuid.New().String()[:8]
 
 	amount, _ := domain.NewAmount(12000)
-	intent, _ := domain.NewPaymentIntent(intentID, "m_1001", orderRef, amount, domain.CurrencyCLP, nil, "corr-read", now)
+	intent, _ := domain.NewPaymentIntent(intentID, "1001", orderRef, amount, domain.CurrencyCLP, nil, "corr-read", now)
 	_ = repo.CreatePaymentIntent(ctx, nil, intent)
 
-	txRecord := domain.NewTransaction(txID, intentID, "m_1001", idemKey, "hash-read-1", "424242", "4242", "corr-read", now)
+	txRecord := domain.NewTransaction(txID, intentID, "1001", idemKey, "hash-read-1", "424242", "4242", "corr-read", now)
 	_ = repo.CreateTransaction(ctx, nil, txRecord)
 
 	// Look up by key
-	found, err := repo.GetTransactionByIdempotencyKey(ctx, "m_1001", idemKey)
+	found, err := repo.GetTransactionByIdempotencyKey(ctx, "1001", idemKey)
 	require.NoError(t, err)
 	assert.Equal(t, txID, found.ID)
-	assert.Equal(t, "m_1001", found.MerchantID)
+	assert.Equal(t, "1001", found.MerchantID)
 	assert.Equal(t, idemKey, found.IdempotencyKey)
 
 	// Non-existent key
-	notFound, err := repo.GetTransactionByIdempotencyKey(ctx, "m_1001", "missing-key")
+	notFound, err := repo.GetTransactionByIdempotencyKey(ctx, "1001", "missing-key")
 	require.NoError(t, err)
 	assert.Nil(t, notFound)
 }
@@ -272,9 +272,9 @@ func TestRepository_ListTransactions(t *testing.T) {
 	ctx := context.Background()
 
 	now := time.Now().UTC()
-	merchantID := "m_1001"
+	merchantID := "1001"
 
-	// Create 3 transactions for m_1001
+	// Create 3 transactions for 1001
 	for i := 0; i < 3; i++ {
 		intentID := uuid.New()
 		orderRef := "ord-list-" + uuid.New().String()[:8]
@@ -291,7 +291,7 @@ func TestRepository_ListTransactions(t *testing.T) {
 	}
 
 	// Filter by merchantID
-	list, total, err := repo.ListTransactions(ctx, listpayments.Filter{
+	list, total, err := repo.ListTransactions(ctx, payment.Filter{
 		MerchantID: &merchantID,
 		Limit:      10,
 		Offset:     0,
@@ -302,7 +302,7 @@ func TestRepository_ListTransactions(t *testing.T) {
 
 	// Filter by status APPROVED
 	approvedStatus := domain.StatusApproved
-	listApproved, totalApproved, err := repo.ListTransactions(ctx, listpayments.Filter{
+	listApproved, totalApproved, err := repo.ListTransactions(ctx, payment.Filter{
 		MerchantID: &merchantID,
 		Status:     &approvedStatus,
 		Limit:      10,
@@ -316,16 +316,16 @@ func TestRepository_ListTransactions(t *testing.T) {
 }
 
 func TestComputePayloadHash(t *testing.T) {
-	hash1 := postgres.ComputePayloadHash("m_1001", "ord-1", 25990, "CLP", "424242", "4242", 12, 2028)
-	hash2 := postgres.ComputePayloadHash("m_1001", "ord-1", 25990, "CLP", "424242", "4242", 12, 2028)
+	hash1 := postgres.ComputePayloadHash("1001", "ord-1", 25990, "CLP", "424242", "4242", 12, 2028)
+	hash2 := postgres.ComputePayloadHash("1001", "ord-1", 25990, "CLP", "424242", "4242", 12, 2028)
 	assert.Equal(t, hash1, hash2, "identical parameters must produce identical hash")
 	assert.Equal(t, 64, len(hash1), "SHA-256 hex string must be 64 characters long")
 
 	// Changing amount must produce different hash
-	hashDiffAmount := postgres.ComputePayloadHash("m_1001", "ord-1", 99990, "CLP", "424242", "4242", 12, 2028)
+	hashDiffAmount := postgres.ComputePayloadHash("1001", "ord-1", 99990, "CLP", "424242", "4242", 12, 2028)
 	assert.NotEqual(t, hash1, hashDiffAmount)
 
 	// Changing card last4 must produce different hash
-	hashDiffCard := postgres.ComputePayloadHash("m_1001", "ord-1", 25990, "CLP", "424242", "9995", 12, 2028)
+	hashDiffCard := postgres.ComputePayloadHash("1001", "ord-1", 25990, "CLP", "424242", "9995", 12, 2028)
 	assert.NotEqual(t, hash1, hashDiffCard)
 }
