@@ -1,6 +1,9 @@
 package domain
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -215,4 +218,14 @@ type TransactionEvent struct {
 	Details         map[string]any     `json:"details,omitempty"`
 	CorrelationID   string             `json:"correlation_id"`
 	OccurredAt      time.Time          `json:"occurred_at"`
+}
+
+// ComputePayloadHash calculates a deterministic SHA-256 hash across canonical payment parameters.
+// PCI Note: Sensitive credentials (full PAN, CVV) are NEVER included in the hash.
+func ComputePayloadHash(merchantID, orderRef string, amount int64, currency, cardBIN, cardLast4 string, expMonth, expYear int) string {
+	canonical := fmt.Sprintf("%s|%s|%d|%s|%s|%s|%02d/%04d",
+		merchantID, orderRef, amount, currency, cardBIN, cardLast4, expMonth, expYear,
+	)
+	hash := sha256.Sum256([]byte(canonical))
+	return hex.EncodeToString(hash[:])
 }

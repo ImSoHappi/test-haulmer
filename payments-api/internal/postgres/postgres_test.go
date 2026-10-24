@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ImSoHappi/test-haulmer/payments-api/internal/app/listpayments"
 	"github.com/ImSoHappi/test-haulmer/payments-api/internal/domain"
 	"github.com/ImSoHappi/test-haulmer/payments-api/internal/postgres"
 )
@@ -117,7 +117,7 @@ func TestRepository_AtomicPaymentFlow(t *testing.T) {
 	}
 
 	// Execute atomic multi-statement insertion using WithTx
-	err = repo.WithTx(ctx, func(tx pgx.Tx) error {
+	err = repo.WithTx(ctx, func(tx any) error {
 		if err := repo.CreatePaymentIntent(ctx, tx, intent); err != nil {
 			return err
 		}
@@ -291,7 +291,7 @@ func TestRepository_ListTransactions(t *testing.T) {
 	}
 
 	// Filter by merchantID
-	list, total, err := repo.ListTransactions(ctx, postgres.ListFilter{
+	list, total, err := repo.ListTransactions(ctx, listpayments.Filter{
 		MerchantID: &merchantID,
 		Limit:      10,
 		Offset:     0,
@@ -302,7 +302,7 @@ func TestRepository_ListTransactions(t *testing.T) {
 
 	// Filter by status APPROVED
 	approvedStatus := domain.StatusApproved
-	listApproved, totalApproved, err := repo.ListTransactions(ctx, postgres.ListFilter{
+	listApproved, totalApproved, err := repo.ListTransactions(ctx, listpayments.Filter{
 		MerchantID: &merchantID,
 		Status:     &approvedStatus,
 		Limit:      10,

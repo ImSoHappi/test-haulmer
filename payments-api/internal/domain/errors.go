@@ -69,6 +69,11 @@ var (
 		Message:    "Specified merchant identifier does not exist.",
 		HTTPStatus: 404,
 	}
+	ErrTransactionNotFound = &DomainError{
+		Code:       "transaction_not_found",
+		Message:    "Specified transaction identifier does not exist or does not belong to merchant.",
+		HTTPStatus: 404,
+	}
 	ErrMerchantInactive = &DomainError{
 		Code:       "merchant_inactive",
 		Message:    "Merchant is currently inactive and cannot process payments.",

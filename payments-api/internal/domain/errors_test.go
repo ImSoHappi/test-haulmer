@@ -25,6 +25,7 @@ func TestDomainErrors_CatalogIntegrity(t *testing.T) {
 		{"UnsupportedCurrency", domain.ErrUnsupportedCurrency, "unsupported_currency", 400},
 		{"MissingRequiredField", domain.ErrMissingRequiredField, "missing_required_field", 400},
 		{"MerchantNotFound", domain.ErrMerchantNotFound, "merchant_not_found", 404},
+		{"TransactionNotFound", domain.ErrTransactionNotFound, "transaction_not_found", 404},
 		{"MerchantInactive", domain.ErrMerchantInactive, "merchant_inactive", 422},
 		{"IdempotencyConflict", domain.ErrIdempotencyConflict, "idempotency_conflict", 409},
 		{"ActiveTransactionExists", domain.ErrActiveTransactionExists, "active_transaction_exists", 409},
