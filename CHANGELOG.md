@@ -4,6 +4,16 @@ Todos los cambios notables en este proyecto se documentarán en este archivo.
 
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
+## [0.5.0] - 2026-10-23
+
+### Agregado
+- **Adaptadores de Persistencia PostgreSQL (Task 04):** Implementación del adaptador secundario de base de datos en `payments-api/internal/postgres/` utilizando `jackc/pgx/v5` con pool de conexiones afinado (`pgxpool`) y consultas SQL explícitas.
+- **Mapeo de Invariantes de Concurrencia (23505):** Detección y traducción transparente de violaciones de restricciones únicas de PostgreSQL a errores tipados de dominio (`ErrIdempotencyConflict`, `ErrIntentAlreadyApproved`, `ErrActiveTransactionExists`).
+- **Transacciones Atómicas ACID:** Gestor transaccional `WithTx` para inserciones atómicas de intenciones, transacciones y eventos, manteniendo las consultas de lectura directamente en el pool.
+- **Control de Concurrencia Optimista:** Actualización de estado condicional (`WHERE id = $1 AND status = $2`) para evitar sobrescritura de estados ante respuestas desfasadas.
+- **Fórmula Determinista de Idempotencia:** Generador `ComputePayloadHash` (SHA-256) sobre parámetros canónicos de cobro cumpliendo con blindaje PCI-DSS.
+- **Consultas y Paginación:** Métodos estandarizados `GetMerchantByID`, `GetPaymentIntentByOrderRef`, `GetTransactionByID`, `GetTransactionByIdempotencyKey`, `ListEventsByTransactionID` y `ListTransactions` con filtros y paginación.
+
 ## [0.4.0] - 2026-10-23
 
 ### Agregado
