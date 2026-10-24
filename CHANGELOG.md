@@ -4,6 +4,15 @@ Todos los cambios notables en este proyecto se documentarán en este archivo.
 
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
+## [0.4.0] - 2026-10-23
+
+### Agregado
+- **Núcleo de Dominio Puro (Task 03):** Implementación del hexágono interior en Go puro (`payments-api/internal/domain/`) consolidado en 5 archivos altamente cohesionados (`card.go`, `amount.go`, `merchant.go`, `payment.go`, `errors.go`) sin dependencias externas.
+- **Value Objects y Blindaje PCI-DSS:** Validación del algoritmo de Luhn (Módulo 10) en `CardNumber`, expiración temporal en `CardExpiry`, `CVV` redactado y auto-enmascaramiento obligatorio mediante `slog.LogValuer` y `fmt.Stringer`.
+- **Máquina de Estados Finita e Inmutable:** Definición de `TransactionStatus` como única fuente de verdad del sistema con control de transiciones legales (`PENDING` -> `PROCESSING` -> `APPROVED`/`DECLINED`/`FAILED`) e inmutabilidad estricta en estados terminales.
+- **Catálogo de Errores Técnicos para Desarrolladores:** Estructura `DomainError` con códigos semánticos para frontend/control de flujo, descripciones técnicas concisas para desarrolladores/integradores y mapeo a códigos HTTP RFC 9457.
+- **Entidades y Agregados:** Modelado de `Merchant`, `PaymentIntent`, `Transaction` (con métodos de mutación `MarkApproved`, `MarkDeclined`, `MarkFailed`) y `TransactionEvent` para auditoría append-only.
+
 ## [0.3.0] - 2026-10-23
 
 ### Agregado
