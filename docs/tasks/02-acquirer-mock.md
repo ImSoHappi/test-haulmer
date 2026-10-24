@@ -2,28 +2,33 @@
 
 - **Servicio:** `acquirer-mock`
 - **Dependencias:** Ninguna
-- **Estado:** PENDING
-- **Trazabilidad:** PRD §R18, §R19 | Technical Design §13.1
+- **Estado:** COMPLETED (v0.3.0)
+- **Trazabilidad:** PRD §R18, §R19 | Technical Design §11.2, §11.3, §13.1
 
 ---
 
 ## 1. Contexto y Objetivo
-Implementar el simulador HTTP del adquirente bancario como un servicio independiente en Go con su propio `go.mod`. Este servicio reproduce con exactitud milimétrica el comportamiento determinista de un banco adquirente (aprobaciones, rechazos, errores 503 temporales, reintentos y timeouts) basándose en 6 tarjetas de prueba predefinidas.
+Implementar el simulador HTTP del adquirente bancario como un servicio independiente en Go con su propio `go.mod`. Este servicio reproduce con exactitud milimétrica el comportamiento determinista de un banco adquirente (aprobaciones, rechazos, errores 503 temporales, reintentos y timeouts) basándose en 6 tarjetas de prueba predefinidas y un endpoint de consulta para reconciliación post-timeout.
 
 ---
 
 ## 2. Archivos Afectados
-- `crear`: `acquirer-mock/go.mod`
-- `crear`: `acquirer-mock/cmd/mock/main.go`
-- `crear`: `acquirer-mock/internal/domain/card_behavior.go`
-- `crear`: `acquirer-mock/internal/handler/authorization_handler.go`
-- `crear`: `acquirer-mock/internal/storage/memory_store.go`
-- `crear`: `acquirer-mock/internal/handler/authorization_handler_test.go`
-- `crear`: `acquirer-mock/Dockerfile`
+- `creado`: `acquirer-mock/go.mod`
+- `creado`: `acquirer-mock/cmd/mock/main.go`
+- `creado`: `acquirer-mock/internal/domain/card_behavior.go`
+- `creado`: `acquirer-mock/internal/domain/authorization.go`
+- `creado`: `acquirer-mock/internal/handler/authorization_handler.go`
+- `creado`: `acquirer-mock/internal/handler/authorization_handler_test.go`
+- `creado`: `acquirer-mock/internal/storage/memory_store.go`
+- `creado`: `acquirer-mock/internal/storage/memory_store_test.go`
+- `creado`: `acquirer-mock/Dockerfile`
+- `creado`: `acquirer-mock/README.md`
+
+*(Nota: Se descartó `health_handler.go` durante el diseño para mantener el componente enfocado y minimalista).*
 
 ---
 
-## 3. Especificación Técnica Detallada
+## 3. Especificación Técnica y Decisiones Incorporadas
 
 ### 3.1 Endpoints HTTP
 1. **`POST /authorizations`**:
@@ -31,7 +36,7 @@ Implementar el simulador HTTP del adquirente bancario como un servicio independi
    - Body:
      ```json
      {
-       "reference_id": "0192f3a4-...",
+       "reference_id": "0192f3a4-8b65-7a91-95a2-c12e8f1b9a21",
        "amount": 25990,
        "currency": "CLP",
        "card": {
@@ -43,41 +48,51 @@ Implementar el simulador HTTP del adquirente bancario como un servicio independi
        }
      }
      ```
-   - Respuestas:
-     - `200 OK`: `{"status": "APPROVED", "code": "00", "message": "Approved", "authorization_code": "AUT-..."}`
-     - `200 OK`: `{"status": "DECLINED", "code": "51", "message": "Insufficient funds"}`
-     - `503 Service Unavailable`: `{"error": "service_unavailable", "message": "Acquirer system error"}`
-     - Timeout simulado: duerme durante 3.5 segundos antes de responder o cortar la conexión.
+   - Respuestas alineadas con Stripe y red bancaria ISO 8583:
+     - `200 OK`: `{"status": "APPROVED", "code": "00", "authorization_code": "AUT-..."}`
+     - `200 OK`: `{"status": "DECLINED", "code": "51", "decline_code": "insufficient_funds", "message": "Your card has insufficient funds."}`
+     - `503 Service Unavailable`: `{"error": "service_unavailable", "code": "acquirer_down", "message": "..."}`
+     - Timeout simulado: duerme durante `TIMEOUT_DELAY_MS` (3.5s en producción, 10ms en tests) antes de responder `504 Gateway Timeout`.
 2. **`GET /authorizations/{reference_id}`**:
-   - Devuelve el estado de la autorización previamente registrada por la referencia:
-     - `200 OK`: `{"reference_id": "...", "status": "APPROVED", "authorization_code": "..."}`
-     - `404 Not Found`: si la referencia no existe (usado para comprobar que un timeout no generó cobro).
+   - Permite a la API principal reconciliar on-demand el estado de un cobro tras sufrir un timeout de red con el adquirente:
+     - `200 OK`: Autorización registrada previamente (`{"reference_id": "...", "status": "APPROVED", ...}`). Evita doble cobro al comprador.
+     - `404 Not Found`: Si no existe autorización para la referencia. Garantiza a la API que el adquirente jamás cobró y es 100% seguro marcar `FAILED`.
 
 ### 3.2 Tabla Determinista de Tarjetas
-| PAN de Prueba | Comportamiento | Simulación |
-| :--- | :--- | :--- |
-| `4242424242424242` | Aprueba | `200 OK`, `APPROVED`, code `00` |
-| `4000000000009995` | Rechaza por saldo | `200 OK`, `DECLINED`, code `51` |
-| `4000000000000119` | Falla persistente | `503 Service Unavailable` |
-| `4000000000000341` | Falla 2 veces con 503, aprueba al 3er intento | Cuenta llamadas por `reference_id` en memoria |
-| `4000000000000101` | Timeout sin registro | Duerme 3.5s, no registra en memoria. `GET` devuelve `404` |
-| `4000000000000259` | Timeout con autorización | Duerme 3.5s, pero registra `APPROVED` en memoria. `GET` devuelve `200` |
-| Cualquier otro válido | Aprueba por defecto | `200 OK`, `APPROVED` |
+| PAN de Prueba | Comportamiento | Simulación HTTP | Almacén en Memoria |
+| :--- | :--- | :--- | :--- |
+| `4242424242424242` | **Aprobación directa** | `200 OK`, `APPROVED`, code `00` | Registra autorización |
+| `4000000000009995` | **Rechazo por saldo** | `200 OK`, `DECLINED`, code `51`, `insufficient_funds` | Registra rechazo |
+| `4000000000000119` | **Falla persistente** | `503 Service Unavailable` (`acquirer_down`) | No registra |
+| `4000000000000341` | **Falla temporal / Flaky** | Intentos 1 y 2: `503 Service Unavailable`<br>Intento 3+: `200 OK` (`APPROVED`, code `00`) | Cuenta llamadas por `reference_id` |
+| `4000000000000101` | **Timeout sin cobro** | Duerme 3.5s, no registra en memoria. `GET` devuelve `404` | **NO registra** (seguro marcar `FAILED`) |
+| `4000000000000259` | **Timeout con cobro previo** | Registra `APPROVED` en memoria y luego duerme 3.5s. `GET` devuelve `200` | **SÍ registra** (salva de doble cobro) |
+| Cualquier otro válido | **Aprobación por defecto** | `200 OK`, `APPROVED`, code `00` | Registra autorización |
+
+### 3.3 Almacenamiento en Memoria Minimalista (`MemoryStore`)
+- Implementación thread-safe de escasas 45 líneas con `sync.RWMutex` exclusivamente para:
+  1. Contar los reintentos de la tarjeta intermitente `...0341`.
+  2. Guardar autorizaciones para resolver el `GET /authorizations/{reference_id}` tras timeouts.
+
+### 3.4 Protección de Datos PCI-DSS
+- Enmascaramiento automático de credenciales sensibles mediante `slog.LogValuer` y `fmt.Stringer`: el PAN completo y el CVV nunca aparecen en stdout/stderr.
 
 ---
 
 ## 4. Protocolo TDD (Superpowers)
-1. **Fase Roja:** Escribir pruebas unitarias en `acquirer-mock/internal/handler/authorization_handler_test.go` para cada una de las 6 tarjetas de prueba y el endpoint `GET /authorizations/{ref}`.
-2. **Fase Verde:** Implementar el store en memoria (`memory_store.go`) y el router `net/http` con los comportamientos exactos de sleep y status code.
-3. **Fase Verificación:** Ejecutar `go test -v ./...` en `acquirer-mock/` verificando 100% de éxito en los 6 casos.
+1. **Fase Roja:** Pruebas unitarias en `acquirer-mock/internal/handler/authorization_handler_test.go` y de concurrencia en `acquirer-mock/internal/storage/memory_store_test.go`.
+2. **Fase Verde:** Implementación del router `net/http` nativo, catálogo de comportamiento y almacén en memoria.
+3. **Fase Verificación:** Ejecución de `go test -v -race ./...` asegurando 100% de éxito con cero carreras de datos.
 
 ---
 
 ## 5. Criterios de Aceptación (Definition of Done)
-- [ ] Módulo Go independiente configurado en `acquirer-mock/go.mod`.
-- [ ] Las 6 tarjetas deterministas responden exactamente según la especificación.
-- [ ] El endpoint `GET /authorizations/{ref}` permite consultar el estado posterior ante timeouts.
-- [ ] `Dockerfile` compila y ejecuta el servicio en el puerto `8081` (o configurable vía `HTTP_PORT`).
+- [x] Módulo Go independiente configurado en `acquirer-mock/go.mod`.
+- [x] Las 6 tarjetas deterministas responden exactamente según la especificación (con códigos ISO/Stripe).
+- [x] El endpoint `GET /authorizations/{ref}` permite consultar el estado posterior ante timeouts.
+- [x] MemoryStore thread-safe con pruebas de concurrencia bajo `-race`.
+- [x] `Dockerfile` compila y ejecuta el servicio en el puerto `8081` (configurable vía `HTTP_PORT`).
+- [x] `README.md` documenta arquitectura, variables y tabla de tarjetas.
 
 ---
 
