@@ -33,12 +33,15 @@ export default function SandboxPage() {
 function SandboxContent() {
   const searchParams = useSearchParams();
   const merchantId = searchParams.get("merchant_id") || "1001";
+  const urlOrderRef = searchParams.get("order_reference");
+  const urlAmount = searchParams.get("amount");
+  const urlIdemKey = searchParams.get("idempotency_key");
 
   // Form State
   const [selectedCardId, setSelectedCardId] = useState<string>("approved");
-  const [orderReference, setOrderReference] = useState<string>(generateOrderRef());
-  const [amount, setAmount] = useState<number>(25990);
-  const [idempotencyKey, setIdempotencyKey] = useState<string>(generateIdempotencyKey());
+  const [orderReference, setOrderReference] = useState<string>(urlOrderRef || generateOrderRef());
+  const [amount, setAmount] = useState<number>(urlAmount ? Number(urlAmount) : 25990);
+  const [idempotencyKey, setIdempotencyKey] = useState<string>(urlIdemKey || generateIdempotencyKey());
   const [cardNumber, setCardNumber] = useState<string>(TEST_CARDS[0].pan);
   const [cardExpiryMonth, setCardExpiryMonth] = useState<number>(TEST_CARDS[0].expMonth);
   const [cardExpiryYear, setCardExpiryYear] = useState<number>(TEST_CARDS[0].expYear);
@@ -96,6 +99,25 @@ function SandboxContent() {
           <span className="font-mono text-indigo-400 font-semibold">{merchantId}</span>.
         </p>
       </div>
+
+      {urlOrderRef && (
+        <div className="p-3.5 bg-indigo-950/40 border border-indigo-500/30 rounded-xl text-xs flex flex-wrap items-center justify-between gap-2 text-indigo-300 shadow-sm">
+          <div className="flex items-center gap-2">
+            <span>⚡ Formulario precargado con la orden:</span>
+            <span className="font-mono font-semibold text-white">{urlOrderRef}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setOrderReference(generateOrderRef());
+              setIdempotencyKey(generateIdempotencyKey());
+            }}
+            className="text-[11px] text-indigo-300 hover:text-white underline"
+          >
+            Generar nuevos valores aleatorios
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Left Column: Preset Cards Selector */}

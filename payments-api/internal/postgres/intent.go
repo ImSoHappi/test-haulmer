@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/ImSoHappi/test-haulmer/payments-api/internal/domain"
@@ -83,3 +84,48 @@ func (r *Repository) GetPaymentIntentByOrderRef(ctx context.Context, merchantID,
 
 	return &pi, nil
 }
+
+// GetPaymentIntentByID retrieves a PaymentIntent by its primary UUID key.
+func (r *Repository) GetPaymentIntentByID(ctx context.Context, id uuid.UUID) (*domain.PaymentIntent, error) {
+	query := `
+		SELECT id, merchant_id, order_reference, amount, currency, metadata, correlation_id, created_at, updated_at
+		FROM payment_intents
+		WHERE id = $1
+	`
+	var (
+		pi            domain.PaymentIntent
+		rawAmount     int64
+		metadataBytes []byte
+	)
+
+	err := r.pool.QueryRow(ctx, query, id).Scan(
+		&pi.ID,
+		&pi.MerchantID,
+		&pi.OrderReference,
+		&rawAmount,
+		&pi.Currency,
+		&metadataBytes,
+		&pi.CorrelationID,
+		&pi.CreatedAt,
+		&pi.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to query payment intent by id: %w", err)
+	}
+
+	amt, err := domain.NewAmount(rawAmount)
+	if err != nil {
+		return nil, fmt.Errorf("corrupt amount in database: %w", err)
+	}
+	pi.Amount = amt
+
+	if len(metadataBytes) > 0 {
+		_ = json.Unmarshal(metadataBytes, &pi.Metadata)
+	}
+
+	return &pi, nil
+}
+

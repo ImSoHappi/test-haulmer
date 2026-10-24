@@ -4,6 +4,21 @@ Todos los cambios notables en este proyecto se documentarán en este archivo.
 
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
+## [0.12.0] - 2026-10-24
+
+### Agregado
+- **Trazabilidad Forense Enriquecida (Task 11):**
+  - Enriquecimiento de `GET /v1/payments/{id}` en `payments-api` mediante `GetPaymentIntentByID` para retornar los datos financieros de la orden comercial (`order_reference`, `amount`, `currency`).
+  - Consolidación de metadatos de auditoría forense (`from_status`, `to_status`, `code`, `message`, `latency_ms`, `acquirer_attempt`, `correlation_id`) en los eventos de `transaction_events` expuestos al consumidor.
+- **Mejoras de Experiencia de Usuario (UX) en Web Dashboard:**
+  - Componente `CopyButton` para copiado en 1 clic de IDs de transacción, claves de idempotencia, referencias de orden, correlation IDs y números de tarjeta enmascarados, con micro-feedback interactivo.
+  - `EventTimeline` rediseñado con transiciones de estado explícitas (`from_status` → `to_status`), insignias cromáticas de diagnóstico, latencia de red bancaria en milisegundos y badges de correlación.
+  - Banner de orden comercial en `/payments/[id]` y botón de acción rápida *"Probar en Sandbox con estos datos"* para precarga instantánea en el simulador mediante parámetros URL.
+  - Alerta de precarga interactiva en `/sandbox` con opción de limpiar o probar de inmediato.
+- **Síntesis de Documentación Maestra:**
+  - `README.md`: Síntesis de supuestos y decisiones técnicas (Sección 4.2), compactación de tabla de campos especiales (Sección 4.3) y rediseño lineal del diagrama Mermaid de arquitectura objetivo (Sección 8).
+  - Limpieza de documentación: consolidación final de deuda técnica y eliminación de backlog temporal al encontrarse 100% resuelto.
+
 ## [0.11.0] - 2026-10-24
 
 ### Agregado
