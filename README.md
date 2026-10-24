@@ -114,35 +114,35 @@ El ecosistema está compuesto por 4 servicios desacoplados y contenerizados que 
 
 ```mermaid
 flowchart LR
-    subgraph ClientLayer ["1. Clientes & Comercios"]
+    subgraph ClientLayer ["1. Clientes y Comercios"]
         Browser["Navegador / Evaluador"]
         Checkout["Checkout / Comercios"]
     end
 
-    subgraph WebLayer ["2. web-dashboard (:3000)"]
-        Dashboard["Panel SSR & Sandbox\nNext.js 15 + Server Actions"]
+    subgraph WebLayer ["2. web-dashboard :3000"]
+        Dashboard["Panel SSR y Sandbox<br/>Next.js 15 + Server Actions"]
     end
 
-    subgraph CoreLayer ["3. payments-api (:8080)"]
+    subgraph CoreLayer ["3. payments-api :8080"]
         direction TB
-        HTTP["Adaptador HTTP (RFC 9457)"]
-        Domain["Dominio Puro & Hexagonal (Go)"]
+        HTTP["Adaptador HTTP RFC 9457"]
+        Domain["Dominio Puro y Hexagonal Go"]
         HTTP --> Domain
     end
 
-    subgraph StorageLayer ["4. PostgreSQL 16 (:5432)"]
-        DB[("PostgreSQL 16\nÍndices Parciales Únicos\nAuditoría Forense")]
+    subgraph StorageLayer ["4. PostgreSQL 16 :5432"]
+        DB[("PostgreSQL 16<br/>Indices Parciales Unicos<br/>Auditoria Forense")]
     end
 
-    subgraph AcquirerLayer ["5. acquirer-mock (:8081)"]
-        Mock["Acquirer Mock (Go)\nSimulador Determinista\nReconciliación On-Demand"]
+    subgraph AcquirerLayer ["5. acquirer-mock :8081"]
+        Mock["Acquirer Mock Go<br/>Simulador Determinista<br/>Reconciliacion On-Demand"]
     end
 
     Browser --> Dashboard
-    Dashboard -->|POST /v1/payments\nGET /v1/payments| HTTP
+    Dashboard -->|REST API y Server Actions| HTTP
     Checkout -->|POST /v1/payments| HTTP
-    Domain -->|Atomic Tx (pgxpool)| DB
-    Domain -->|POST /authorizations\nGET /authorizations/{ref}| Mock
+    Domain -->|Transacciones ACID pgxpool| DB
+    Domain -->|Autorizaciones y Reconciliacion| Mock
 ```
 
 ---
@@ -439,24 +439,24 @@ El sistema fue diseñado intencionalmente como un **MVP sólido, desacoplado y s
 
 ```mermaid
 flowchart TD
-    Client["Checkouts / Comercios / Dashboard"] --> Ingress["Ingress / Load Balancer (ALB)"]
-    Ingress --> API["payments-api Cluster (Stateless)"]
+    Client["Checkouts / Comercios / Dashboard"] --> Ingress["Ingress / Load Balancer ALB"]
+    Ingress --> API["payments-api Cluster Stateless"]
 
     subgraph Storage ["Persistencia Segregada"]
         API -->|Escritura Transaccional ACID| DBP[("PostgreSQL Primary")]
-        DBP -.->|Replicación Streaming| DBR[("PostgreSQL Read Replica")]
-        DBR -.->|Consultas Dashboard & Reportería| API
+        DBP -.->|Replicacion Streaming| DBR[("PostgreSQL Read Replica")]
+        DBR -.->|Consultas Dashboard y Reporteria| API
     end
 
-    subgraph Banking ["Enrutamiento Bancario & Resiliencia"]
+    subgraph Banking ["Enrutamiento Bancario y Resiliencia"]
         API --> CB{"Circuit Breaker Router"}
         CB -->|Adquirente Primario| BankA["Transbank"]
-        CB -->|Fallback / Contingencia| BankB["Redelcom"]
+        CB -->|Fallback y Contingencia| BankB["Redelcom"]
     end
 
-    subgraph AsyncEcosystem ["Ecosistema Asíncrono (Batch)"]
-        API -.->|Eventos de Dominio| Queue["Message Broker (Kafka / RabbitMQ)"]
-        Queue --> W_Invoicing["Worker Facturación (SII)"]
+    subgraph AsyncEcosystem ["Ecosistema Asincrono Batch"]
+        API -.->|Eventos de Dominio| Queue["Message Broker Kafka / RabbitMQ"]
+        Queue --> W_Invoicing["Worker Facturacion SII"]
         Queue --> W_Subs["Worker Suscripciones Batch"]
         Queue --> W_Webhooks["Worker Webhooks Comercios"]
     end
