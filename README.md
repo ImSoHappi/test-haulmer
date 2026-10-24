@@ -114,35 +114,14 @@ El ecosistema está compuesto por 4 servicios desacoplados y contenerizados que 
 
 ```mermaid
 flowchart LR
-    subgraph ClientLayer ["1. Clientes y Comercios"]
-        Browser["Navegador / Evaluador"]
-        Checkout["Checkout / Comercios"]
-    end
+    Dashboard["web-dashboard<br/>(Next.js 15)"]
+    API["payments-api<br/>(Go 1.25+)"]
+    DB[("PostgreSQL 16<br/>(Persistencia)")]
+    Mock["acquirer-mock<br/>(Simulador Bancario)"]
 
-    subgraph WebLayer ["2. web-dashboard :3000"]
-        Dashboard["Panel SSR y Sandbox<br/>Next.js 15 + Server Actions"]
-    end
-
-    subgraph CoreLayer ["3. payments-api :8080"]
-        direction TB
-        HTTP["Adaptador HTTP RFC 9457"]
-        Domain["Dominio Puro y Hexagonal Go"]
-        HTTP --> Domain
-    end
-
-    subgraph StorageLayer ["4. PostgreSQL 16 :5432"]
-        DB[("PostgreSQL 16<br/>Indices Parciales Unicos<br/>Auditoria Forense")]
-    end
-
-    subgraph AcquirerLayer ["5. acquirer-mock :8081"]
-        Mock["Acquirer Mock Go<br/>Simulador Determinista<br/>Reconciliacion On-Demand"]
-    end
-
-    Browser --> Dashboard
-    Dashboard -->|REST API y Server Actions| HTTP
-    Checkout -->|POST /v1/payments| HTTP
-    Domain -->|Transacciones ACID pgxpool| DB
-    Domain -->|Autorizaciones y Reconciliacion| Mock
+    Dashboard -->|Consultas y Cobros| API
+    API -->|Persistencia ACID| DB
+    API -->|Autorizaciones| Mock
 ```
 
 ---
