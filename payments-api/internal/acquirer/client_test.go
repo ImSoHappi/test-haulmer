@@ -58,13 +58,14 @@ func TestClient_Authorize_SuccessImmediate(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := acquirer.NewClient(acquirer.ClientConfig{
+	client, err := acquirer.NewClient(acquirer.ClientConfig{
 		BaseURL:          server.URL,
 		RequestTimeout:   1 * time.Second,
 		ReconcileTimeout: 1 * time.Second,
 		InitialBackoff:   10 * time.Millisecond,
 		MaxRetries:       2,
 	})
+	require.NoError(t, err)
 
 	resp, err := client.Authorize(context.Background(), sampleAuthorizeRequest("ref-123", "corr-xyz"))
 	require.NoError(t, err)
@@ -107,13 +108,14 @@ func TestClient_Authorize_DeclineImmediate(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client := acquirer.NewClient(acquirer.ClientConfig{
+			client, err := acquirer.NewClient(acquirer.ClientConfig{
 				BaseURL:          server.URL,
 				RequestTimeout:   1 * time.Second,
 				ReconcileTimeout: 1 * time.Second,
 				InitialBackoff:   5 * time.Millisecond,
 				MaxRetries:       3,
 			})
+			require.NoError(t, err)
 
 			resp, err := client.Authorize(context.Background(), sampleAuthorizeRequest("ref-decline", "corr-decline"))
 			require.NoError(t, err)
@@ -136,15 +138,16 @@ func TestClient_Authorize_ClientError_NoRetry(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := acquirer.NewClient(acquirer.ClientConfig{
+	client, err := acquirer.NewClient(acquirer.ClientConfig{
 		BaseURL:          server.URL,
 		RequestTimeout:   1 * time.Second,
 		ReconcileTimeout: 1 * time.Second,
 		InitialBackoff:   5 * time.Millisecond,
 		MaxRetries:       3,
 	})
+	require.NoError(t, err)
 
-	_, err := client.Authorize(context.Background(), sampleAuthorizeRequest("ref-bad", "corr-bad"))
+	_, err = client.Authorize(context.Background(), sampleAuthorizeRequest("ref-bad", "corr-bad"))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, domain.ErrAcquirerUnexpected)
 	// Must not retry on 400 Bad Request:
@@ -176,13 +179,14 @@ func TestClient_Authorize_RetryOn503_EventualSuccess(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := acquirer.NewClient(acquirer.ClientConfig{
+	client, err := acquirer.NewClient(acquirer.ClientConfig{
 		BaseURL:          server.URL,
 		RequestTimeout:   1 * time.Second,
 		ReconcileTimeout: 1 * time.Second,
 		InitialBackoff:   5 * time.Millisecond,
 		MaxRetries:       2, // Total attempts: 1 initial + 2 retries = 3
 	})
+	require.NoError(t, err)
 
 	resp, err := client.Authorize(context.Background(), sampleAuthorizeRequest("ref-retry", "corr-retry"))
 	require.NoError(t, err)
@@ -202,15 +206,16 @@ func TestClient_Authorize_RetryOn503_Exhausted(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := acquirer.NewClient(acquirer.ClientConfig{
+	client, err := acquirer.NewClient(acquirer.ClientConfig{
 		BaseURL:          server.URL,
 		RequestTimeout:   1 * time.Second,
 		ReconcileTimeout: 1 * time.Second,
 		InitialBackoff:   5 * time.Millisecond,
 		MaxRetries:       2, // 1 initial + 2 retries = 3 calls
 	})
+	require.NoError(t, err)
 
-	_, err := client.Authorize(context.Background(), sampleAuthorizeRequest("ref-down", "corr-down"))
+	_, err = client.Authorize(context.Background(), sampleAuthorizeRequest("ref-down", "corr-down"))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, domain.ErrAcquirerUnavailable)
 	assert.Equal(t, int32(3), atomic.LoadInt32(&requestCount))
@@ -245,13 +250,14 @@ func TestClient_Authorize_Timeout_ReconciliationApproved(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := acquirer.NewClient(acquirer.ClientConfig{
+	client, err := acquirer.NewClient(acquirer.ClientConfig{
 		BaseURL:          server.URL,
 		RequestTimeout:   50 * time.Millisecond,
 		ReconcileTimeout: 500 * time.Millisecond,
 		InitialBackoff:   5 * time.Millisecond,
 		MaxRetries:       0, // Go straight to reconciliation on timeout
 	})
+	require.NoError(t, err)
 
 	resp, err := client.Authorize(context.Background(), sampleAuthorizeRequest("ref-timeout-ok", "corr-recon"))
 	require.NoError(t, err)
@@ -279,13 +285,14 @@ func TestClient_Authorize_Timeout_ReconciliationNotFound(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := acquirer.NewClient(acquirer.ClientConfig{
+	client, err := acquirer.NewClient(acquirer.ClientConfig{
 		BaseURL:          server.URL,
 		RequestTimeout:   50 * time.Millisecond,
 		ReconcileTimeout: 500 * time.Millisecond,
 		InitialBackoff:   5 * time.Millisecond,
 		MaxRetries:       0,
 	})
+	require.NoError(t, err)
 
 	resp, err := client.Authorize(context.Background(), sampleAuthorizeRequest("ref-timeout-404", "corr-404"))
 	require.NoError(t, err)
@@ -311,15 +318,16 @@ func TestClient_Authorize_Timeout_ReconciliationFailed(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := acquirer.NewClient(acquirer.ClientConfig{
+	client, err := acquirer.NewClient(acquirer.ClientConfig{
 		BaseURL:          server.URL,
 		RequestTimeout:   50 * time.Millisecond,
 		ReconcileTimeout: 50 * time.Millisecond,
 		InitialBackoff:   5 * time.Millisecond,
 		MaxRetries:       0,
 	})
+	require.NoError(t, err)
 
-	_, err := client.Authorize(context.Background(), sampleAuthorizeRequest("ref-unknown", "corr-unknown"))
+	_, err = client.Authorize(context.Background(), sampleAuthorizeRequest("ref-unknown", "corr-unknown"))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, domain.ErrAcquirerUnknownResult)
 }
@@ -339,15 +347,25 @@ func TestClient_HeaderPropagation(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := acquirer.NewClient(acquirer.ClientConfig{
+	client, err := acquirer.NewClient(acquirer.ClientConfig{
 		BaseURL:          server.URL,
 		RequestTimeout:   1 * time.Second,
 		ReconcileTimeout: 1 * time.Second,
 		InitialBackoff:   5 * time.Millisecond,
 		MaxRetries:       0,
 	})
+	require.NoError(t, err)
 
-	_, err := client.Authorize(context.Background(), sampleAuthorizeRequest("ref-header", "corr-unique-987"))
+	_, err = client.Authorize(context.Background(), sampleAuthorizeRequest("ref-header", "corr-unique-987"))
 	require.NoError(t, err)
 	assert.Equal(t, "corr-unique-987", capturedHeader)
+}
+
+// 10. Fail-Fast Validation: Missing BaseURL returns error
+func TestClient_NewClient_MissingBaseURL(t *testing.T) {
+	_, err := acquirer.NewClient(acquirer.ClientConfig{
+		BaseURL: "",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "BaseURL is required")
 }
