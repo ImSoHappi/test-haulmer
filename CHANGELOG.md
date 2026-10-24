@@ -4,6 +4,16 @@ Todos los cambios notables en este proyecto se documentarán en este archivo.
 
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
+## [0.9.0] - 2026-10-24
+
+### Agregado
+- **Panel Web Operativo & Simulador (Task 08):** Aplicación web interactiva en `web-dashboard/` construida con Next.js 15, React 19, TypeScript y Tailwind CSS para evaluación y monitoreo de pagos.
+- **Dashboard de Transacciones (`/`):** Visualización de métricas en tiempo real (total procesado, volumen, aprobadas, rechazadas) y tabla interactiva de pagos con filtrado por estado y paginación.
+- **Línea de Tiempo de Auditoría (`/payments/[id]`):** Componente visual `EventTimeline` vertical que detalla el ciclo de vida inmutable de cada transacción (`TRANSACTION_CREATED`, `STATUS_CHANGED`, `ACQUIRER_ATTEMPT`) con latencia bancaria y códigos de respuesta.
+- **Simulador Interactivo de Checkout (`/sandbox`):** Formulario de pagos con precarga en un clic de las 7 tarjetas deterministas de prueba (Aprobada, Fondos insuficientes, 503, Flaky, Timeouts, Luhn), bloqueo síncrono anti-doble envío y resultado en tiempo real.
+- **Arquitectura Unificada de API (Server Actions):** Integración de cobros interactivos mediante Server Actions de Next.js, unificando toda la configuración en una sola variable de entorno obligatoria (`PAYMENTS_API_URL`), eliminando variables públicas (`NEXT_PUBLIC_*`), problemas de CORS en navegador y exposición de topología de red interna.
+- **Contenerización Standalone:** Configuración `output: 'standalone'` y `Dockerfile` multi-stage optimizado para despliegue en producción.
+
 ## [0.8.0] - 2026-10-24
 
 ### Agregado
