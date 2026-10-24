@@ -28,6 +28,14 @@ type MockRepository struct {
 	ListEventsByTransactionIDFunc      func(ctx context.Context, txID uuid.UUID) ([]*domain.TransactionEvent, error)
 	ListTransactionsFunc               func(ctx context.Context, filter payment.Filter) ([]*domain.Transaction, int, error)
 	HasApprovedTransactionFunc         func(ctx context.Context, intentID uuid.UUID) (bool, error)
+	GetPaymentIntentByIDFunc           func(ctx context.Context, id uuid.UUID) (*domain.PaymentIntent, error)
+}
+
+func (m *MockRepository) GetPaymentIntentByID(ctx context.Context, id uuid.UUID) (*domain.PaymentIntent, error) {
+	if m.GetPaymentIntentByIDFunc != nil {
+		return m.GetPaymentIntentByIDFunc(ctx, id)
+	}
+	return nil, nil
 }
 
 func (m *MockRepository) GetMerchantByID(ctx context.Context, id string) (*domain.Merchant, error) {
@@ -296,14 +304,31 @@ func TestService_GetPayment_Success(t *testing.T) {
 			}
 			return nil, nil
 		},
+		GetPaymentIntentByIDFunc: func(ctx context.Context, id uuid.UUID) (*domain.PaymentIntent, error) {
+			amt, _ := domain.NewAmount(10000)
+			return domain.NewPaymentIntent(id, merchantID, "ORD-TEST-1", amt, "CLP", nil, "corr-test", now)
+		},
 		ListEventsByTransactionIDFunc: func(ctx context.Context, id uuid.UUID) ([]*domain.TransactionEvent, error) {
+			fromSt := domain.StatusPending
+			toSt := domain.StatusProcessing
+			code := "51"
+			msg := "Fondos insuficientes"
+			latency := 150
+			attempt := 1
 			return []*domain.TransactionEvent{
 				{
-					ID:            1,
-					TransactionID: txID,
-					EventType:     domain.EventTransactionCreated,
-					OccurredAt:    now,
-					Details:       map[string]any{"amount": int64(10000)},
+					ID:              1,
+					TransactionID:   txID,
+					EventType:       domain.EventStatusChanged,
+					FromStatus:      &fromSt,
+					ToStatus:        &toSt,
+					Code:            code,
+					Message:         msg,
+					LatencyMs:       &latency,
+					AcquirerAttempt: &attempt,
+					CorrelationID:   "corr-event-1",
+					OccurredAt:      now,
+					Details:         map[string]any{"custom": "value"},
 				},
 			}, nil
 		},
@@ -319,8 +344,19 @@ func TestService_GetPayment_Success(t *testing.T) {
 	assert.Equal(t, txID.String(), out.ID)
 	assert.Equal(t, "APPROVED", out.Status)
 	assert.Equal(t, "AUTH-999", out.AuthorizationCode)
+	assert.Equal(t, "ORD-TEST-1", out.OrderReference)
+	assert.Equal(t, int64(10000), out.Amount)
+	assert.Equal(t, "CLP", out.Currency)
 	assert.Len(t, out.Events, 1)
-	assert.Equal(t, string(domain.EventTransactionCreated), out.Events[0].EventType)
+	assert.Equal(t, string(domain.EventStatusChanged), out.Events[0].EventType)
+	assert.Equal(t, "PENDING", out.Events[0].Payload["from_status"])
+	assert.Equal(t, "PROCESSING", out.Events[0].Payload["to_status"])
+	assert.Equal(t, "51", out.Events[0].Payload["code"])
+	assert.Equal(t, "Fondos insuficientes", out.Events[0].Payload["message"])
+	assert.Equal(t, 150, out.Events[0].Payload["latency_ms"])
+	assert.Equal(t, 1, out.Events[0].Payload["acquirer_attempt"])
+	assert.Equal(t, "corr-event-1", out.Events[0].Payload["correlation_id"])
+	assert.Equal(t, "value", out.Events[0].Payload["custom"])
 }
 
 func TestService_GetPayment_MultiTenantIsolation(t *testing.T) {

@@ -69,6 +69,9 @@ type GetResponse struct {
 	ResultMessage     string      `json:"result_message,omitempty"`
 	AuthorizationCode string      `json:"authorization_code,omitempty"`
 	CorrelationID     string      `json:"correlation_id"`
+	OrderReference    string      `json:"order_reference"`
+	Amount            int64       `json:"amount"`
+	Currency          string      `json:"currency"`
 	CreatedAt         time.Time   `json:"created_at"`
 	UpdatedAt         time.Time   `json:"updated_at"`
 	CompletedAt       *time.Time  `json:"completed_at,omitempty"`

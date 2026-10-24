@@ -334,9 +334,20 @@ func (s *Service) GetPayment(ctx context.Context, req GetRequest) (*GetResponse,
 		eventItems[i] = EventItem{
 			ID:        fmt.Sprintf("%d", e.ID),
 			EventType: string(e.EventType),
-			Payload:   e.Details,
+			Payload:   buildEventPayload(e),
 			CreatedAt: e.OccurredAt,
 		}
+	}
+
+	var (
+		orderRef string
+		amount   int64
+		currency string
+	)
+	if pi, err := s.repo.GetPaymentIntentByID(ctx, tx.PaymentIntentID); err == nil && pi != nil {
+		orderRef = pi.OrderReference
+		amount = pi.Amount.Int64()
+		currency = pi.Currency
 	}
 
 	return &GetResponse{
@@ -352,6 +363,9 @@ func (s *Service) GetPayment(ctx context.Context, req GetRequest) (*GetResponse,
 		ResultMessage:     tx.ResultMessage,
 		AuthorizationCode: tx.AuthorizationCode,
 		CorrelationID:     tx.CorrelationID,
+		OrderReference:    orderRef,
+		Amount:            amount,
+		Currency:          currency,
 		CreatedAt:         tx.CreatedAt,
 		UpdatedAt:         tx.UpdatedAt,
 		CompletedAt:       tx.CompletedAt,
@@ -431,4 +445,36 @@ func mapToProcessResponse(t *domain.Transaction, orderRef string, amount int64, 
 		CreatedAt:         t.CreatedAt,
 		CompletedAt:       t.CompletedAt,
 	}
+}
+
+func buildEventPayload(e *domain.TransactionEvent) map[string]any {
+	if e == nil {
+		return map[string]any{}
+	}
+	payload := make(map[string]any, len(e.Details)+7)
+	for k, v := range e.Details {
+		payload[k] = v
+	}
+	if e.FromStatus != nil {
+		payload["from_status"] = string(*e.FromStatus)
+	}
+	if e.ToStatus != nil {
+		payload["to_status"] = string(*e.ToStatus)
+	}
+	if e.Code != "" {
+		payload["code"] = e.Code
+	}
+	if e.Message != "" {
+		payload["message"] = e.Message
+	}
+	if e.LatencyMs != nil {
+		payload["latency_ms"] = *e.LatencyMs
+	}
+	if e.AcquirerAttempt != nil {
+		payload["acquirer_attempt"] = *e.AcquirerAttempt
+	}
+	if e.CorrelationID != "" {
+		payload["correlation_id"] = e.CorrelationID
+	}
+	return payload
 }

@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { fetchPaymentById } from "@/lib/api";
 import { StatusBadge } from "@/components/StatusBadge";
 import { EventTimeline } from "@/components/EventTimeline";
-import { formatDate } from "@/lib/formatters";
+import { CopyButton } from "@/components/CopyButton";
+import { formatDate, formatCLP } from "@/lib/formatters";
 
 export const dynamic = "force-dynamic";
 
@@ -31,16 +32,28 @@ export default async function PaymentDetailPage(props: DetailPageProps) {
     notFound();
   }
 
+  const maskedCard = payment
+    ? `${payment.card_bin || "••••••"} •••••• ${payment.card_last4 || "••••"}`
+    : "";
+
+  const sandboxRetryUrl = payment
+    ? `/sandbox?merchant_id=${merchantId}&order_reference=${encodeURIComponent(
+        payment.order_reference || ""
+      )}&amount=${payment.amount || ""}&idempotency_key=${encodeURIComponent(
+        payment.idempotency_key || ""
+      )}`
+    : `/sandbox?merchant_id=${merchantId}`;
+
   return (
-    <div className="space-y-8 max-w-4xl mx-auto">
-      {/* Back button and page title */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-6 max-w-4xl mx-auto">
+      {/* Header bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-800/80">
         <div>
           <Link
             href={`/?merchant_id=${merchantId}`}
             className="text-xs text-indigo-400 hover:text-indigo-300 inline-flex items-center gap-1 mb-2"
           >
-            ← Volver al listado
+            ← Volver al listado de pagos
           </Link>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-white tracking-tight">
@@ -48,17 +61,21 @@ export default async function PaymentDetailPage(props: DetailPageProps) {
             </h1>
             {payment && <StatusBadge status={payment.status} />}
           </div>
-          <p className="text-xs text-slate-400 mt-1 font-mono">
-            ID: <span className="text-slate-300">{id}</span>
-          </p>
+          <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-1 font-mono">
+            <span>ID:</span>
+            <span className="text-slate-300">{id}</span>
+            <CopyButton text={id} label="Copiar ID de transacción" />
+          </div>
         </div>
 
-        <Link
-          href={`/sandbox?merchant_id=${merchantId}`}
-          className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-medium rounded-lg text-slate-200 self-start sm:self-auto"
-        >
-          Probar otra en Sandbox
-        </Link>
+        {payment && (
+          <Link
+            href={sandboxRetryUrl}
+            className="inline-flex items-center gap-2 px-3.5 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 text-xs font-semibold rounded-lg shadow-sm transition-colors self-start sm:self-auto"
+          >
+            <span>⚡ Probar en Sandbox con estos datos</span>
+          </Link>
+        )}
       </div>
 
       {errorMsg && (
@@ -70,58 +87,103 @@ export default async function PaymentDetailPage(props: DetailPageProps) {
 
       {payment && (
         <>
+          {/* Order Summary & Financial Banner */}
+          {payment.amount !== undefined && payment.amount > 0 && (
+            <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950/30 border border-slate-800 rounded-xl p-5 flex flex-wrap items-center justify-between gap-4 shadow-sm">
+              <div>
+                <span className="text-[11px] text-slate-400 uppercase tracking-wider block font-medium">
+                  Monto de la Orden
+                </span>
+                <span className="text-2xl font-bold text-white tracking-tight">
+                  {formatCLP(payment.amount)}
+                </span>
+                <span className="text-xs text-slate-400 ml-2 font-mono">
+                  {payment.currency || "CLP"}
+                </span>
+              </div>
+
+              {payment.order_reference && (
+                <div className="bg-slate-950/60 px-3.5 py-2 rounded-lg border border-slate-800 flex items-center gap-2">
+                  <div>
+                    <span className="text-[10px] text-slate-400 block uppercase">
+                      Orden Comercial
+                    </span>
+                    <span className="font-mono text-xs text-indigo-300 font-semibold">
+                      {payment.order_reference}
+                    </span>
+                  </div>
+                  <CopyButton
+                    text={payment.order_reference}
+                    label="Copiar referencia de orden"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Main Info Card */}
           <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">
+            <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">
               Atributos de Pago & Conciliación
             </h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div>
-                <span className="text-slate-500 block">Comercio (Tenant)</span>
+                <span className="text-slate-500 block mb-0.5">Comercio (Tenant)</span>
                 <span className="font-mono text-slate-200 font-medium">
                   {payment.merchant_id}
                 </span>
               </div>
 
               <div>
-                <span className="text-slate-500 block">Fecha de Registro</span>
+                <span className="text-slate-500 block mb-0.5">Fecha de Registro</span>
                 <span className="text-slate-200 font-medium">
                   {formatDate(payment.created_at)}
                 </span>
               </div>
 
               <div>
-                <span className="text-slate-500 block">Tarjeta Utilizada</span>
-                <span className="font-mono text-slate-200 font-medium">
-                  {payment.card_bin || "••••••"} •••••• {payment.card_last4 || "••••"}
-                </span>
+                <span className="text-slate-500 block mb-0.5">Tarjeta Utilizada</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono text-slate-200 font-medium">
+                    {maskedCard}
+                  </span>
+                  <CopyButton text={maskedCard} label="Copiar tarjeta enmascarada" />
+                </div>
               </div>
 
               <div>
-                <span className="text-slate-500 block">Código de Autorización</span>
+                <span className="text-slate-500 block mb-0.5">Código de Autorización</span>
                 <span className="font-mono text-emerald-400 font-semibold">
-                  {payment.authorization_code || "Sin autorización (Rechazada/Pendiente)"}
+                  {payment.authorization_code || "Sin autorización"}
                 </span>
               </div>
 
               <div>
-                <span className="text-slate-500 block">Clave de Idempotencia</span>
-                <span className="font-mono text-slate-300 truncate block">
-                  {payment.idempotency_key}
-                </span>
+                <span className="text-slate-500 block mb-0.5">Clave de Idempotencia</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono text-slate-300 truncate max-w-[240px]">
+                    {payment.idempotency_key}
+                  </span>
+                  <CopyButton text={payment.idempotency_key} label="Copiar clave de idempotencia" />
+                </div>
               </div>
 
               <div>
-                <span className="text-slate-500 block">Correlation ID (Trazabilidad)</span>
-                <span className="font-mono text-indigo-400 truncate block">
-                  {payment.correlation_id || "N/A"}
-                </span>
+                <span className="text-slate-500 block mb-0.5">Correlation ID (Trazabilidad)</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono text-indigo-400 truncate max-w-[240px]">
+                    {payment.correlation_id || "N/A"}
+                  </span>
+                  {payment.correlation_id && (
+                    <CopyButton text={payment.correlation_id} label="Copiar Correlation ID" />
+                  )}
+                </div>
               </div>
 
               {payment.decline_source && (
                 <div>
-                  <span className="text-slate-500 block">Origen del Rechazo</span>
+                  <span className="text-slate-500 block mb-0.5">Origen del Rechazo</span>
                   <span className="font-medium text-amber-400">
                     {payment.decline_source}
                   </span>
@@ -130,7 +192,7 @@ export default async function PaymentDetailPage(props: DetailPageProps) {
 
               {payment.result_code && (
                 <div>
-                  <span className="text-slate-500 block">Código de Resultado</span>
+                  <span className="text-slate-500 block mb-0.5">Código de Resultado</span>
                   <span className="font-mono text-slate-300">
                     {payment.result_code}: {payment.result_message || ""}
                   </span>

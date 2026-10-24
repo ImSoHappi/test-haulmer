@@ -164,40 +164,39 @@ sequenceDiagram
 
 #### Supuestos y Decisiones de Arquitectura
 
-- **Supuesto: Experiencia de Checkout Síncrona e Interactiva**
-  - *Contexto:* Asumí que los comercios operan bajo un flujo de compra interactivo: el comprador hace clic en *"Pagar"* y espera frente a la pantalla la confirmación en tiempo real de su transacción.
-  - *Decisión:* Diseñé la API para procesar de forma **síncrona** en el ciclo de vida de la petición HTTP. Esto ofrece retroalimentación inmediata al comprador y evita la sobreingeniería de colas o mecanismos de sondeo continuo (*polling*) en el frontend.
-  - *Impacto en Seguridad (PCI-DSS):* Al procesar de forma síncrona, los datos confidenciales de la tarjeta (el PAN de 16 dígitos y el código CVV) residen **únicamente en la memoria volátil (RAM)** de la petición durante los milisegundos que toma comunicarse con el banco. Nunca se escriben en disco ni en almacenamiento temporal, reduciendo al mínimo la superficie de ataque y el alcance de auditoría.
+- **Supuesto: Checkout Síncrono e Interactivo**
+  - *Contexto:* El comprador espera la confirmación inmediata de su pago en pantalla. No requiere colas intermedias ni polling en el frontend.
+  - *Impacto PCI-DSS:* El PAN completo y el CVV residen **únicamente en la memoria volátil (RAM)** de la petición durante los milisegundos de comunicación bancaria. Jamás se escriben en disco ni en almacenamiento temporal.
 
-- **Decisión: Garantía de No Doble Cobro en Tres Niveles de Defensa**
-  El mayor riesgo en un procesador de pagos es cobrar dos veces una misma orden (por ejemplo, si el comprador presiona el botón dos veces por impaciencia o sufre una intermitencia de red). Para blindar el sistema, implementé tres barreras complementarias:
-  1. *Nivel HTTP / Criptográfico (Idempotencia):* Cada solicitud exige una cabecera `Idempotency-Key`. La API genera un hash criptográfico SHA-256 de los datos canónicos (`merchant_id`, `order_reference`, `amount`, `card_bin`, `card_last4`). Si la misma petición llega duplicada, se devuelve la respuesta original almacenada en caché con la cabecera `Idempotent-Replayed: true` (HTTP 200) sin volver a cobrar ni molestar al banco. Si alguien reutiliza la clave para enviar un monto o datos alterados, se rechaza de inmediato con HTTP 409 Conflict (`idempotency_conflict`).
-  2. *Nivel de Aplicación (`HasApprovedTransaction`):* Antes de enviar cualquier mensaje al adquirente bancario, el servicio consulta si la orden comercial ya cuenta con una transacción aprobada. Si ya fue pagada con éxito, la ejecución se detiene de inmediato con HTTP 409 (`intent_already_approved`), previniendo cargos duplicados a la tarjeta del cliente.
-  3. *Nivel Físico en PostgreSQL (Última Línea de Defensa):* Si dos solicitudes simultáneas lograran cruzar la aplicación en una condición de carrera extrema, la base de datos lo bloquea físicamente mediante índices parciales únicos:
-     - `uq_tx_idempotency`: Evita colisiones de clave por comercio.
-     - `uq_tx_one_approved`: Garantiza a lo sumo una transacción `APPROVED` por orden comercial.
-     - `uq_tx_one_active`: Limita a una sola transacción en curso (`PENDING` o `PROCESSING`) a la vez.
+- **Decisión: Garantía Anti-Doble Cobro en Tres Niveles**
+  Para evitar duplicar cobros ante reintentos o desconexiones, el sistema implementa tres barreras defensivas:
+  1. *Nivel HTTP (Idempotencia Criptográfica):* Exige cabecera `Idempotency-Key` y genera un hash SHA-256 canónico (`payload_hash`). Reintentos idénticos devuelven la respuesta en caché (`Idempotent-Replayed: true`, HTTP 200). Reintentos con parámetros alterados se rechazan con HTTP 409 Conflict.
+  2. *Nivel de Aplicación (`HasApprovedTransaction`):* Antes de contactar al banco, la API verifica si la orden ya tiene un cobro aprobado. Si ya fue pagada, corta con HTTP 409 (`intent_already_approved`), blindando la tarjeta del cliente.
+  3. *Nivel Físico PostgreSQL (Última Línea de Defensa):* Índices parciales únicos en base de datos garantizan físicamente la integridad:
+     - `uq_tx_idempotency`: Previene duplicados por comercio y clave.
+     - `uq_tx_one_approved`: Garantiza a lo sumo una transacción `APPROVED` por orden.
+     - `uq_tx_one_active`: Permite solo una transacción en curso (`PENDING` o `PROCESSING`) a la vez.
 
-- **Decisión: Validaciones Tempranas en Umbral HTTP (Anti-Carding y Ahorro)**
-  - Validaciones de formato como el algoritmo de Luhn (dígito verificador de la tarjeta), fecha de expiración, montos enteros válidos en CLP y verificación del estado activo del comercio se ejecutan **en memoria en el handler HTTP**, antes de iniciar transacciones en la base de datos o llamar al banco.
-  - Si un usuario ingresa una tarjeta con numeración inválida o vencida, se retorna de inmediato HTTP 422 Unprocessable Entity. Esto mitiga ataques automatizados de prueba de tarjetas (*carding*), protege el pool de conexiones de PostgreSQL y evita registrar basura innecesaria en la base de datos.
+- **Decisión: Validaciones Tempranas en Umbral HTTP (Anti-Carding)**
+  - Validaciones de formato (algoritmo de Luhn, expiración, montos CLP y estado activo del comercio) se evalúan **en memoria en el handler HTTP**.
+  - Tarjetas inválidas fallan de inmediato con HTTP 422 Unprocessable Entity, mitigando ataques de *carding*, protegiendo el pool de conexiones y evitando basura en base de datos.
 
-- **Decisión: Resiliencia ante Fallas del Adquirente (Reintentos Selectivos)**
-  - Si el adquirente bancario sufre una caída transitoria de infraestructura (`503 Service Unavailable` o fallo de red), la API reintenta automáticamente hasta 3 veces aplicando retroceso exponencial (*exponential backoff*) y fluctuación aleatoria (*jitter*) para no saturar al servidor.
-  - Los reintentos son **estrictamente selectivos**: ante rechazos de negocio definitivos (`DECLINED` por fondos insuficientes o tarjeta expirada) o errores de validación (`400`, `422`), la API **nunca reintenta**, protegiendo al sistema de ciclos inútiles.
+- **Decisión: Resiliencia ante Fallas del Banco (Reintentos Selectivos)**
+  - Ante caídas transitorias de infraestructura (`503` o fallos de red), la API reintenta automáticamente hasta 3 veces con *exponential backoff* y *jitter*.
+  - Los reintentos son **selectivos**: ante rechazos de negocio definitivos (`DECLINED` por fondos insuficientes o expirada) o errores de cliente (`400`, `422`), la API nunca reintenta.
 
-- **Decisión: Recuperación On-Demand ante Timeouts (Sin Daemons ni Cronjobs)**
-  - Si una llamada al adquirente supera el tiempo límite de espera (*read timeout*), no sabemos si el banco cobró o no antes del corte.
-  - En lugar de esperar a un proceso en segundo plano o cronjob nocturno, la API ejecuta una **reconciliación síncrona on-demand**: en esa misma petición, consulta de inmediato `GET /authorizations/{reference_id}` al simulador. Si el banco confirma que la operación se registró, se aprueba localmente; si responde 404, se marca como fallida de forma segura.
+- **Decisión: Reconciliación On-Demand ante Timeouts (Sin Daemons ni Cronjobs)**
+  - Si una llamada bancaria sufre un corte de red (*read timeout*), no sabemos si el banco cobró.
+  - La API ejecuta una **reconciliación síncrona inmediata**: consulta `GET /authorizations/{reference_id}` al simulador en la misma petición. Si el banco confirma el cobro, aprueba localmente; si responde 404, asienta falla segura.
 
-- **Decisión: Protección ante Desconexión del Comprador (`context.WithoutCancel`)**
-  - Si un comprador pierde señal en su teléfono o cierra el navegador mientras el banco está procesando la solicitud, el contexto HTTP del cliente se cancela.
-  - Para evitar que la transacción quede en un estado huérfano a mitad de camino, la API desacopla la comunicación bancaria y la persistencia en base de datos mediante `context.WithoutCancel(ctx)`, asegurando que la operación termine de registrar su estado final de manera consistente.
+- **Decisión: Protección ante Desconexión del Cliente (`context.WithoutCancel`)**
+  - Si el comprador cierra la pestaña o pierde cobertura mientras el banco procesa, la petición del cliente se cancela.
+  - Con `context.WithoutCancel(ctx)`, la API asegura que la llamada bancaria y la persistencia en base de datos concluyan de manera consistente, evitando transacciones huérfanas.
 
-- **Decisión: Trazabilidad Completa y Cero Filtraciones en Logs**
-  - **Identificadores Correlacionados:** Se mantiene trazabilidad de punta a punta vinculando la orden comercial (`order_reference`), la clave de deduplicación (`idempotency_key`), el identificador del gateway (`transaction_id`) y el identificador bancario (`acquirer_reference_id`).
-  - **Línea de Tiempo Forense:** Cada cambio de estado genera un evento inmutable registrado con marca temporal (`PAYMENT_REQUESTED`, `IDEMPOTENCY_LOCKED`, `ACQUIRER_SENT`, `ACQUIRER_TIMEOUT`, `RECONCILED`, `PAYMENT_APPROVED`), visible en el dashboard para soporte técnico y auditoría.
-  - **Logs Seguros (Zero-Leak):** Registro en formato JSON estructurado con `log/slog`. Los tipos de tarjeta implementan las interfaces `slog.LogValuer` y `fmt.Stringer`, garantizando que el PAN se imprima siempre enmascarado (`424242******4242`) y el CVV jamás figure en logs.
+- **Decisión: Trazabilidad Forense y Cero Filtraciones (Zero-Leak)**
+  - **Trazabilidad de Punta a Punta:** Cada operación enlaza `order_reference`, `idempotency_key`, `transaction_id` y `acquirer_reference_id` bajo un mismo `X-Correlation-ID`.
+  - **Línea de Tiempo Forense:** Cada cambio de estado genera un evento inmutable en `transaction_events` (`PAYMENT_REQUESTED`, `IDEMPOTENCY_LOCKED`, `ACQUIRER_SENT`, etc.), visible en el dashboard.
+  - **Logs Estructurados Seguros:** Registro JSON con `log/slog`. Las entidades implementan `slog.LogValuer` y `fmt.Stringer`, enmascarando automáticamente el PAN (`424242******4242`) y omitiendo el CVV de cualquier log.
 
 ---
 
@@ -285,14 +284,12 @@ erDiagram
 
 #### Campos Especiales y su Propósito Técnico
 
-Para asegurar integridad, seguridad PCI y soporte operacional, incluí ciertos campos clave cuyo propósito conviene destacar:
-
 | Campo | Ubicación | Propósito y Uso Técnico |
 | :--- | :--- | :--- |
-| **`idempotency_key`** | `transactions` | **Garantía anti-duplicados:** Identificador único enviado por el cliente. Si la conexión se interrumpe y el cliente reenvía la petición con la misma clave, la API reconoce que ya fue procesada y devuelve la respuesta en caché (`Idempotent-Replayed: true`) sin volver a cobrar. |
-| **`payload_hash`** | `transactions` | **Huella digital de integridad:** Hash SHA-256 calculado a partir de los datos canónicos de la compra (`merchant_id`, `order_reference`, `amount`, `card_bin`, `card_last4`). Si alguien reutiliza una clave existente pero altera el monto o la tarjeta, la API detecta el conflicto y rechaza con `409 Conflict`, impidiendo cobros indebidos. |
-| **`correlation_id`** | `payment_intents`, `transactions`, `events` | **Trazabilidad de punta a punta:** Identificador UUID (propagado vía cabecera `X-Correlation-ID`) que conecta todo el ciclo de vida. Permite cruzar en segundos los logs del servidor (`slog`), las consultas en PostgreSQL y los eventos bancarios ante cualquier reclamo o investigación. |
-| **`card_bin` y `card_last4`** | `transactions` | **Cumplimiento estricto PCI-DSS:** Por normativa de seguridad bancaria, el número de tarjeta completo (16 dígitos) y el CVV **nunca se guardan en base de datos**. Al guardar solo los primeros 6 dígitos (identifican banco emisor) y los últimos 4, permitimos que el comercio y el comprador reconozcan la tarjeta (`424242******4242`) sin exponer datos sensibles. |
+| **`idempotency_key`** | `transactions` | **Anti-Duplicados:** Identificador único del cliente. Reintentos exactos devuelven la respuesta en caché (`Idempotent-Replayed: true`) sin re-cobrar al banco. |
+| **`payload_hash`** | `transactions` | **Integridad Criptográfica:** Hash SHA-256 canónico de la petición. Si se reutiliza una clave alterando monto o tarjeta, rechaza con `409 Conflict`. |
+| **`correlation_id`** | `payment_intents`, `transactions`, `events` | **Trazabilidad de Punta a Punta:** UUID (`X-Correlation-ID`) que enlaza logs de aplicación (`slog`), registros en base de datos y llamadas bancarias. |
+| **`card_bin` y `card_last4`** | `transactions` | **PCI-DSS Estricto:** PAN y CVV jamás se persisten. Solo se guardan los primeros 6 y últimos 4 dígitos para auditoría visual (`424242******4242`). |
 
 ---
 
@@ -357,7 +354,6 @@ Para el alcance de este desafío, opté conscientemente por una estructura de **
 ├── docs/                          # Documentación técnica y trazabilidad de requerimientos
 │   ├── prd.md                     # Documento de Requerimientos de Producto (PRD)
 │   ├── technical-design.md        # Documento de Diseño Técnico de Arquitectura
-│   ├── backlog-improvements.md    # Registro de deuda técnica controlada y mejoras futuras
 │   └── tasks/                     # Desglose metodológico de las 10 tareas del proyecto
 ├── payments-api/                  # Servicio central de procesamiento de pagos (Go 1.25+)
 │   ├── cmd/api/main.go            # Composition Root y apagado ordenado (Graceful Shutdown)
@@ -406,33 +402,26 @@ El sistema fue diseñado intencionalmente como un **MVP sólido, desacoplado y s
 
 ```mermaid
 flowchart TD
-    subgraph Ingress ["1. Ingress & Tráfico Externo"]
-        Client[Compradores / Checkouts / Dashboard] --> ALB[Load Balancer / Ingress ALB]
+    Client["Checkouts / Comercios / Dashboard"] --> Ingress["Ingress / Load Balancer (ALB)"]
+    Ingress --> API["payments-api Cluster (Stateless)"]
+
+    subgraph Storage ["Persistencia Segregada"]
+        API -->|Escritura Transaccional ACID| DBP[("PostgreSQL Primary")]
+        DBP -.->|Replicación Streaming| DBR[("PostgreSQL Read Replica")]
+        DBR -.->|Consultas Dashboard & Reportería| API
     end
 
-    subgraph ServiceMesh ["2. Capa de Aplicación Stateless (Escalable)"]
-        ALB --> API1["payments-api (Pod 1)"]
-        ALB --> API2["payments-api (Pod 2)"]
-        ALB --> APIN["payments-api (Pod N)"]
+    subgraph Banking ["Enrutamiento Bancario & Resiliencia"]
+        API --> CB{"Circuit Breaker Router"}
+        CB -->|Adquirente Primario| BankA["Transbank"]
+        CB -->|Fallback / Contingencia| BankB["Redelcom"]
     end
 
-    subgraph Storage ["3. Persistencia Segregada (Lectura / Escritura)"]
-        API1 & API2 & APIN -->|Escritura Transaccional ACID| DB_Primary[("PostgreSQL Primary (Master)")]
-        DB_Primary -.->|Replicación Streaming| DB_Replica[("PostgreSQL Read Replica")]
-        API1 & API2 & APIN -.->|Consultas Dashboard & Reportería| DB_Replica
-    end
-
-    subgraph Banking ["4. Enrutamiento Bancario & Circuit Breaker"]
-        API1 & API2 & APIN --> CB{"Circuit Breaker Router"}
-        CB -->|Adquirente Principal| BankA["Transbank / Primario"]
-        CB -->|Fallback / Contingencia| BankB["Redelcom / Alternativo"]
-    end
-
-    subgraph AsyncEcosystem ["5. Ecosistema Asíncrono (Batch & Webhooks)"]
-        API1 & API2 & APIN -->|Eventos de Dominio| Queue["Message Broker (RabbitMQ / Kafka)"]
-        Queue --> W_Invoicing["Worker: Facturación Electrónica (SII)"]
-        Queue --> W_Subs["Worker: Suscripciones Periódicas Batch"]
-        Queue --> W_Webhooks["Worker: Notificaciones Webhooks a Comercios"]
+    subgraph AsyncEcosystem ["Ecosistema Asíncrono (Batch)"]
+        API -.->|Eventos de Dominio| Queue["Message Broker (Kafka / RabbitMQ)"]
+        Queue --> W_Invoicing["Worker Facturación (SII)"]
+        Queue --> W_Subs["Worker Suscripciones Batch"]
+        Queue --> W_Webhooks["Worker Webhooks Comercios"]
     end
 ```
 

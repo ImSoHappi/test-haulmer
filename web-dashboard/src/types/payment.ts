@@ -31,6 +31,9 @@ export interface EventItem {
 }
 
 export interface TransactionDetail extends TransactionListItem {
+  order_reference?: string;
+  amount?: number;
+  currency?: string;
   events: EventItem[];
 }
 

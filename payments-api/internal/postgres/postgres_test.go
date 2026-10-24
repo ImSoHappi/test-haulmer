@@ -319,6 +319,36 @@ func TestRepository_ListTransactions(t *testing.T) {
 	}
 }
 
+func TestRepository_GetPaymentIntentByID(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	now := time.Now().UTC()
+	piID := uuid.New()
+	amt, _ := domain.NewAmount(45000)
+	pi, err := domain.NewPaymentIntent(piID, "1001", "ord-intent-test", amt, "CLP", map[string]any{"source": "test"}, "corr-pi-test", now)
+	require.NoError(t, err)
+
+	err = repo.CreatePaymentIntent(ctx, nil, pi)
+	require.NoError(t, err)
+
+	// Fetch by ID
+	fetched, err := repo.GetPaymentIntentByID(ctx, piID)
+	require.NoError(t, err)
+	require.NotNil(t, fetched)
+	assert.Equal(t, piID, fetched.ID)
+	assert.Equal(t, "1001", fetched.MerchantID)
+	assert.Equal(t, "ord-intent-test", fetched.OrderReference)
+	assert.Equal(t, int64(45000), fetched.Amount.Int64())
+	assert.Equal(t, "CLP", fetched.Currency)
+
+	// Fetch non-existent ID
+	nonExistent, err := repo.GetPaymentIntentByID(ctx, uuid.New())
+	require.NoError(t, err)
+	assert.Nil(t, nonExistent)
+}
+
 func TestComputePayloadHash(t *testing.T) {
 	hash1 := postgres.ComputePayloadHash("1001", "ord-1", 25990, "CLP", "424242", "4242", 12, 2028)
 	hash2 := postgres.ComputePayloadHash("1001", "ord-1", 25990, "CLP", "424242", "4242", 12, 2028)
