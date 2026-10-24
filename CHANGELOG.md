@@ -4,6 +4,15 @@ Todos los cambios notables en este proyecto se documentarán en este archivo.
 
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
+## [0.11.0] - 2026-10-24
+
+### Agregado
+- **Documentación Maestra Pitch-Ready (Task 10):** Redacción completa de `README.md` maestro explicando la arquitectura, decisiones técnicas, modelo de base de datos relacional y supuestos de ingeniería.
+- **Supuestos Clave y Decisiones Técnicas:** Explicación del flujo de checkout síncrono e interactivo, seguridad de tarjetas exclusivamente en RAM volátil (PCI-DSS), validaciones tempranas anti-carding en umbral HTTP (Luhn/expiración en memoria), garantía de no doble cobro en 3 niveles, reintentos selectivos y reconciliación on-demand.
+- **Modelo Relacional en PostgreSQL:** Justificación del desacople 1:N entre `payment_intents` (órdenes comerciales) y `transactions` (intentos técnicos de cobro), aislamiento multi-tenant con `merchants` y garantía física mediante índices parciales únicos (`uq_tx_one_approved`).
+- **Plan de Escalabilidad y Evolución Asíncrona:** Visión a futuro que contempla balanceo stateless horizontal, réplicas de lectura, circuit breakers y evolución asíncrona mediante colas (RabbitMQ/Kafka) para facturación diferida y cobro recurrente de suscripciones por lotes (*batch*).
+- **Pragmatismo de Monorepo y Trazabilidad AI:** Argumentación de la elección de monorepo para MVP y declaración transparente del uso de asistentes de IA en pair programming asistido, referenciando los artefactos de diseño en `docs/` (`prd.md`, `technical-design.md`, `tasks/`).
+
 ## [0.10.0] - 2026-10-24
 
 ### Agregado
