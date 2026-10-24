@@ -4,6 +4,14 @@ Todos los cambios notables en este proyecto se documentarán en este archivo.
 
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
+## [0.6.0] - 2026-10-23
+
+### Agregado
+- **Cliente HTTP del Adquirente Bancario & Resiliencia (Task 05):** Implementación del adaptador secundario en `payments-api/internal/acquirer/` para comunicación HTTP resiliente con `acquirer-mock`.
+- **Política Estricta de Reintentos:** Reintentos automáticos (hasta 3 intentos totales) con backoff exponencial y jitter aleatorio exclusivamente ante caídas transitorias (`503 Service Unavailable` o caídas de red), garantizando cero reintentos ante decisiones deterministas de negocio (`APPROVED`, `DECLINED` ej. fondos insuficientes, tarjeta expirada, rechazo emisor) y errores de cliente (`400 Bad Request`, `422 Unprocessable`).
+- **Reconciliación On-Demand ante Timeouts:** Mitigación de cobros huérfanos mediante consulta síncrona `GET /authorizations/{reference_id}` tras superar el tiempo límite de lectura/escritura, reconociendo cobros aprobados para evitar doble cobro o retornando falla segura (`FAILED`) ante `404 Not Found`.
+- **Propagación de Trazabilidad (`X-Correlation-ID`):** Inyección obligatoria de cabeceras de correlación en todas las peticiones externas para unificar los logs entre la API y el simulador bancario.
+
 ## [0.5.0] - 2026-10-23
 
 ### Agregado

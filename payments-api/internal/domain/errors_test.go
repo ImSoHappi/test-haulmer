@@ -33,6 +33,7 @@ func TestDomainErrors_CatalogIntegrity(t *testing.T) {
 		{"InvalidStateTransition", domain.ErrInvalidStateTransition, "invalid_state_transition", 422},
 		{"AcquirerUnavailable", domain.ErrAcquirerUnavailable, "acquirer_unavailable", 503},
 		{"AcquirerTimeout", domain.ErrAcquirerTimeout, "acquirer_timeout", 504},
+		{"AcquirerUnknownResult", domain.ErrAcquirerUnknownResult, "acquirer_unknown_result", 202},
 		{"AcquirerUnexpected", domain.ErrAcquirerUnexpected, "acquirer_unexpected_error", 502},
 	}
 
