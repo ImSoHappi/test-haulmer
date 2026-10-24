@@ -101,7 +101,7 @@ var (
 	}
 )
 
-// Infrastructure / Acquirer Errors (502 / 503 / 504)
+// Infrastructure / Acquirer Errors (502 / 503 / 504 / 202)
 var (
 	ErrAcquirerUnavailable = &DomainError{
 		Code:       "acquirer_unavailable",
@@ -112,6 +112,11 @@ var (
 		Code:       "acquirer_timeout",
 		Message:    "Acquirer request exceeded socket read/write execution timeout budget.",
 		HTTPStatus: 504,
+	}
+	ErrAcquirerUnknownResult = &DomainError{
+		Code:       "acquirer_unknown_result",
+		Message:    "Acquirer authorization timed out and on-demand reconciliation could not confirm outcome.",
+		HTTPStatus: 202,
 	}
 	ErrAcquirerUnexpected = &DomainError{
 		Code:       "acquirer_unexpected_error",

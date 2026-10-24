@@ -2,25 +2,20 @@
 
 - **Servicio:** `payments-api`
 - **Dependencias:** `01-database-migrations`, `03-domain-core`
-- **Estado:** PENDING
+- **Estado:** COMPLETED (v0.5.0)
 - **Trazabilidad:** PRD §BR-07, §BR-11 | Technical Design §5.1, §8.3, §10.2
 
 ---
 
 ## 1. Contexto y Objetivo
-Implementar los adaptadores de salida para PostgreSQL utilizando `pgx/v5` con SQL explícito. Los repositorios deben respetar transacciones ACID para operaciones compuestas (crear intento + transacción + evento) y traducir limpiamente los errores de restricción única de PostgreSQL (`23505`) a errores semánticos de dominio.
+Implementar los adaptadores de salida para PostgreSQL utilizando `pgx/v5` con SQL explícito. Los repositorios respetan transacciones ACID para operaciones compuestas (crear intento + transacción + evento) y traducen limpiamente los errores de restricción única de PostgreSQL (`23505`) a errores semánticos de dominio.
 
 ---
 
-## 2. Archivos Afectados
-- `crear`: `payments-api/internal/app/ports.go` (definición de puertos del repositorio)
-- `crear`: `payments-api/internal/adapters/postgres/db.go` (conexión pool con `pgxpool`)
-- `crear`: `payments-api/internal/adapters/postgres/tx_manager.go`
-- `crear`: `payments-api/internal/adapters/postgres/merchant_repo.go`
-- `crear`: `payments-api/internal/adapters/postgres/payment_intent_repo.go`
-- `crear`: `payments-api/internal/adapters/postgres/transaction_repo.go`
-- `crear`: `payments-api/internal/adapters/postgres/event_repo.go`
-- `crear`: `payments-api/internal/adapters/postgres/transaction_repo_test.go` (test de integración)
+## 2. Archivos Implementados
+- `payments-api/internal/postgres/pool.go` (conexión pool con `pgxpool`)
+- `payments-api/internal/postgres/repository.go` (repositorio consolidado, QueryRunner, transacciones atómicas `WithTx`, mapeo 23505 y bloqueo optimista)
+- `payments-api/internal/postgres/repository_test.go` (suite de pruebas de integración con `-race` contra PostgreSQL real)
 
 ---
 
@@ -69,10 +64,10 @@ Si el error retornado por Postgres tiene código `23505` (Unique Violation):
 ---
 
 ## 5. Criterios de Aceptación (Definition of Done)
-- [ ] Operaciones de base de datos utilizan `pgx/v5` con sentencias parametrizadas (cero riesgo de SQL Injection).
-- [ ] Transacciones atómicas: `payment_intent` + `transaction` + `event` se crean en una sola transacción SQL.
-- [ ] Mapeo exacto de los índices `uq_tx_idempotency`, `uq_tx_one_approved` y `uq_tx_one_active` a errores de dominio.
-- [ ] Paginación por cursor estable basada en `(created_at, id)`.
+- [x] Operaciones de base de datos utilizan `pgx/v5` con sentencias parametrizadas (cero riesgo de SQL Injection).
+- [x] Transacciones atómicas: `payment_intent` + `transaction` + `event` se crean en una sola transacción SQL.
+- [x] Mapeo exacto de los índices `uq_tx_idempotency`, `uq_tx_one_approved` y `uq_tx_one_active` a errores de dominio.
+- [x] Paginación estable basada en `LIMIT` y `OFFSET`.
 
 ---
 
