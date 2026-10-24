@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -21,9 +22,10 @@ func main() {
 	}))
 	slog.SetDefault(logger)
 
-	port := os.Getenv("HTTP_PORT")
+	port := strings.TrimSpace(os.Getenv("HTTP_PORT"))
 	if port == "" {
-		port = "8081"
+		logger.Error("HTTP_PORT environment variable is required")
+		os.Exit(1)
 	}
 
 	timeoutDelayStr := os.Getenv("TIMEOUT_DELAY_MS")

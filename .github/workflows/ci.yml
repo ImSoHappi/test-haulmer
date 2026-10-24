@@ -1,0 +1,72 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  backend-ci:
+    name: Backend CI (Go 1.23)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+
+      - name: Run Go vet (Static Analysis)
+        run: |
+          cd payments-api && go vet ./...
+          cd ../acquirer-mock && go vet ./...
+
+      - name: Verify Code Complexity (Cyclomatic <= 15 & Cognitive <= 20)
+        run: |
+          go run github.com/fzipp/gocyclo/cmd/gocyclo@latest -over 15 payments-api acquirer-mock
+          go run github.com/uudashr/gocognit/cmd/gocognit@latest -over 20 payments-api acquirer-mock
+
+      - name: Security Vulnerability Scan (govulncheck)
+        run: |
+          cd payments-api && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+          cd ../acquirer-mock && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+      - name: Run Unit & Concurrency Tests with Race Detector
+        run: |
+          cd payments-api && go test -v -race ./...
+          cd ../acquirer-mock && go test -v -race ./...
+
+  frontend-ci:
+    name: Frontend CI (Next.js 15 & TypeScript)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web-dashboard
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: web-dashboard/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit dependencies for security vulnerabilities
+        run: npm audit --audit-level=high
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Verify Standalone Production Build
+        run: npm run build
+        env:
+          PAYMENTS_API_URL: http://localhost:8080

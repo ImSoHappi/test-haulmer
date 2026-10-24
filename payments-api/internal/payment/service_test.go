@@ -27,6 +27,7 @@ type MockRepository struct {
 	GetTransactionByIDFunc             func(ctx context.Context, id uuid.UUID) (*domain.Transaction, error)
 	ListEventsByTransactionIDFunc      func(ctx context.Context, txID uuid.UUID) ([]*domain.TransactionEvent, error)
 	ListTransactionsFunc               func(ctx context.Context, filter payment.Filter) ([]*domain.Transaction, int, error)
+	HasApprovedTransactionFunc         func(ctx context.Context, intentID uuid.UUID) (bool, error)
 }
 
 func (m *MockRepository) GetMerchantByID(ctx context.Context, id string) (*domain.Merchant, error) {
@@ -104,6 +105,13 @@ func (m *MockRepository) ListTransactions(ctx context.Context, filter payment.Fi
 		return m.ListTransactionsFunc(ctx, filter)
 	}
 	return nil, 0, nil
+}
+
+func (m *MockRepository) HasApprovedTransaction(ctx context.Context, intentID uuid.UUID) (bool, error) {
+	if m.HasApprovedTransactionFunc != nil {
+		return m.HasApprovedTransactionFunc(ctx, intentID)
+	}
+	return false, nil
 }
 
 // MockAcquirerClient implements payment.AcquirerClient for unit tests

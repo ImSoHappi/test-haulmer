@@ -19,7 +19,7 @@ func getTestDatabaseURL() string {
 	if url := os.Getenv("TEST_DATABASE_URL"); url != "" {
 		return url
 	}
-	return "postgres://postgres:postgres@localhost:5432/payments_test?sslmode=disable"
+	return "postgres://payments_user:payments_pass@localhost:5432/payments_db?sslmode=disable"
 }
 
 func TestMigrator_LifecycleAndConstraints(t *testing.T) {

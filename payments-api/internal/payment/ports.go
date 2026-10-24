@@ -22,6 +22,7 @@ type Repository interface {
 	GetTransactionByID(ctx context.Context, id uuid.UUID) (*domain.Transaction, error)
 	ListEventsByTransactionID(ctx context.Context, txID uuid.UUID) ([]*domain.TransactionEvent, error)
 	ListTransactions(ctx context.Context, filter Filter) ([]*domain.Transaction, int, error)
+	HasApprovedTransaction(ctx context.Context, intentID uuid.UUID) (bool, error)
 }
 
 // AcquirerClient defines the secondary banking client required to authorize charges.

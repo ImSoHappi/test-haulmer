@@ -1,0 +1,92 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: haulmer-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-payments_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-payments_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-payments_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-payments_user} -d ${POSTGRES_DB:-payments_db}"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+    networks:
+      - payments-net
+
+  acquirer-mock:
+    build:
+      context: ./acquirer-mock
+      dockerfile: Dockerfile
+    container_name: haulmer-acquirer-mock
+    restart: unless-stopped
+    environment:
+      HTTP_PORT: 8081
+      LOG_LEVEL: INFO
+    ports:
+      - "${ACQUIRER_PORT:-8081}:8081"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8081/health || exit 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+    networks:
+      - payments-net
+
+  payments-api:
+    build:
+      context: ./payments-api
+      dockerfile: Dockerfile
+    container_name: haulmer-payments-api
+    restart: unless-stopped
+    environment:
+      PORT: 8080
+      DATABASE_URL: postgres://${POSTGRES_USER:-payments_user}:${POSTGRES_PASSWORD:-payments_pass}@postgres:5432/${POSTGRES_DB:-payments_db}?sslmode=disable
+      ACQUIRER_BASE_URL: http://acquirer-mock:8081
+      PAYMENT_MAX_AMOUNT_CLP: ${PAYMENT_MAX_AMOUNT_CLP:-10000000}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "${API_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      acquirer-mock:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/health || exit 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+    networks:
+      - payments-net
+
+  web-dashboard:
+    build:
+      context: ./web-dashboard
+      dockerfile: Dockerfile
+    container_name: haulmer-web-dashboard
+    restart: unless-stopped
+    environment:
+      PORT: 3000
+      PAYMENTS_API_URL: http://payments-api:8080
+    ports:
+      - "${DASHBOARD_PORT:-3000}:3000"
+    depends_on:
+      payments-api:
+        condition: service_healthy
+    networks:
+      - payments-net
+
+volumes:
+  postgres_data:
+    name: haulmer-postgres-data
+
+networks:
+  payments-net:
+    name: haulmer-payments-net
+    driver: bridge

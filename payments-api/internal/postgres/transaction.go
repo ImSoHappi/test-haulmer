@@ -241,3 +241,14 @@ func (r *Repository) scanTransaction(row pgx.Row) (*domain.Transaction, error) {
 	}
 	return &t, nil
 }
+
+// HasApprovedTransaction checks if a payment intent already has a transaction in APPROVED status.
+func (r *Repository) HasApprovedTransaction(ctx context.Context, intentID uuid.UUID) (bool, error) {
+	query := `SELECT EXISTS(SELECT 1 FROM transactions WHERE payment_intent_id = $1 AND status = 'APPROVED')`
+	var exists bool
+	err := r.pool.QueryRow(ctx, query, intentID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("failed to check approved transaction: %w", err)
+	}
+	return exists, nil
+}

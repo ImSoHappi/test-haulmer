@@ -69,9 +69,13 @@ func main() {
 
 	// 5. Initialize Secondary Adapters
 	repo := postgres.NewRepository(pool)
-	acquirerClient := acquirer.NewClient(acquirer.ClientConfig{
+	acquirerClient, err := acquirer.NewClient(acquirer.ClientConfig{
 		BaseURL: cfg.AcquirerBaseURL,
 	})
+	if err != nil {
+		logger.Error("failed to initialize acquirer client", "error", err)
+		os.Exit(1)
+	}
 
 	// 6. Initialize Core Application Service
 	paymentService := payment.NewService(repo, acquirerClient, cfg.PaymentMaxAmountCLP)

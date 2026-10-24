@@ -37,7 +37,6 @@ func NewService(repo Repository, acquirer AcquirerClient, maxAmountCLP int64) *S
 
 // ProcessPayment orchestrates validation, idempotency, persistence, and banking authorization.
 func (s *Service) ProcessPayment(ctx context.Context, req ProcessRequest) (*ProcessResponse, error) {
-	// 1. Merchant Validation (Early gate / Anti-Carding / Zero DB waste)
 	merchant, err := s.repo.GetMerchantByID(ctx, req.MerchantID)
 	if err != nil {
 		return nil, err
@@ -46,36 +45,12 @@ func (s *Service) ProcessPayment(ctx context.Context, req ProcessRequest) (*Proc
 		return nil, domain.ErrMerchantInactive
 	}
 
-	// 2. Domain Value Objects Validation
-	amount, err := domain.NewAmount(req.Amount)
-	if err != nil {
-		return nil, err
-	}
-	currency, err := domain.NewCurrency(req.Currency)
-	if err != nil {
-		return nil, err
-	}
-	if err := amount.ValidateMax(s.maxAmountCLP); err != nil {
-		return nil, err
-	}
-	cardNum, err := domain.NewCardNumber(req.CardNumber)
-	if err != nil {
-		return nil, err
-	}
-	_, err = domain.NewCVV(req.CardCVV)
-	if err != nil {
-		return nil, err
-	}
-	expiry, err := domain.NewCardExpiry(req.CardExpiryMonth, req.CardExpiryYear)
-	if err != nil {
-		return nil, err
-	}
 	now := time.Now().UTC()
-	if expiry.IsExpired(now) {
-		return nil, domain.ErrCardExpired
+	amount, currency, cardNum, err := s.validateDomainInputs(req, now)
+	if err != nil {
+		return nil, err
 	}
 
-	// 3. Compute Canonical Payload Hash (PCI compliant, no sensitive PAN or CVV)
 	cardBIN := cardNum.BIN()
 	cardLast4 := cardNum.Last4()
 	incomingHash := domain.ComputePayloadHash(
@@ -89,49 +64,121 @@ func (s *Service) ProcessPayment(ctx context.Context, req ProcessRequest) (*Proc
 		req.CardExpiryYear,
 	)
 
-	// 4. Idempotency & Concurrency Check
+	// Idempotency check
+	if earlyResp, err := s.checkExistingIdempotency(ctx, req, incomingHash, currency, now); err != nil || earlyResp != nil {
+		return earlyResp, err
+	}
+
+	// Atomic initial insertion
+	txModel, err := s.createInitialTransaction(ctx, req, amount, currency, incomingHash, cardBIN, cardLast4, now)
+	if err != nil {
+		return nil, err
+	}
+
+	// Acquirer authorization & resolution
+	return s.executeAcquirerCall(ctx, txModel, req, currency)
+}
+
+func (s *Service) validateDomainInputs(req ProcessRequest, now time.Time) (domain.Amount, string, domain.CardNumber, error) {
+	amount, err := domain.NewAmount(req.Amount)
+	if err != nil {
+		return domain.Amount{}, "", domain.CardNumber{}, err
+	}
+	currency, err := domain.NewCurrency(req.Currency)
+	if err != nil {
+		return domain.Amount{}, "", domain.CardNumber{}, err
+	}
+	if err := amount.ValidateMax(s.maxAmountCLP); err != nil {
+		return domain.Amount{}, "", domain.CardNumber{}, err
+	}
+	cardNum, err := domain.NewCardNumber(req.CardNumber)
+	if err != nil {
+		return domain.Amount{}, "", domain.CardNumber{}, err
+	}
+	if _, err := domain.NewCVV(req.CardCVV); err != nil {
+		return domain.Amount{}, "", domain.CardNumber{}, err
+	}
+	expiry, err := domain.NewCardExpiry(req.CardExpiryMonth, req.CardExpiryYear)
+	if err != nil {
+		return domain.Amount{}, "", domain.CardNumber{}, err
+	}
+	if expiry.IsExpired(now) {
+		return domain.Amount{}, "", domain.CardNumber{}, domain.ErrCardExpired
+	}
+	return amount, currency, cardNum, nil
+}
+
+func (s *Service) checkExistingIdempotency(ctx context.Context, req ProcessRequest, incomingHash string, currency string, now time.Time) (*ProcessResponse, error) {
 	existingTx, err := s.repo.GetTransactionByIdempotencyKey(ctx, req.MerchantID, req.IdempotencyKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check idempotency key: %w", err)
 	}
-	if existingTx != nil {
-		if existingTx.PayloadHash != incomingHash {
-			return nil, domain.ErrIdempotencyConflict
+	if existingTx == nil {
+		return nil, nil
+	}
+	if existingTx.PayloadHash != incomingHash {
+		return nil, domain.ErrIdempotencyConflict
+	}
+	if existingTx.Status.IsTerminal() {
+		return mapToProcessResponse(existingTx, req.OrderReference, req.Amount, currency, true), nil
+	}
+	if existingTx.Status == domain.StatusProcessing {
+		if time.Since(existingTx.CreatedAt) < 5*time.Minute {
+			return nil, domain.ErrActiveTransactionExists
 		}
-		if existingTx.Status.IsTerminal() {
-			return mapToProcessResponse(existingTx, req.OrderReference, req.Amount, currency, true), nil
+		_ = existingTx.MarkFailed("processing_timeout", "Transaction timed out in processing state", now)
+		_, _ = s.repo.UpdateTransactionStatus(ctx, nil, existingTx, domain.StatusProcessing)
+	}
+	return nil, nil
+}
+
+func (s *Service) resolvePaymentIntent(
+	ctx context.Context,
+	tx any,
+	req ProcessRequest,
+	amount domain.Amount,
+	currency string,
+	now time.Time,
+) (*domain.PaymentIntent, error) {
+	pi, err := s.repo.GetPaymentIntentByOrderRef(ctx, req.MerchantID, req.OrderReference)
+	if err != nil {
+		return nil, err
+	}
+	if pi != nil {
+		hasApproved, err := s.repo.HasApprovedTransaction(ctx, pi.ID)
+		if err != nil {
+			return nil, err
 		}
-		if existingTx.Status == domain.StatusProcessing {
-			if time.Since(existingTx.CreatedAt) < 5*time.Minute {
-				return nil, domain.ErrActiveTransactionExists
-			}
-			// Stale/orphan transaction (> 5 min): mark failed to unblock new attempt
-			_ = existingTx.MarkFailed("processing_timeout", "Transaction timed out in processing state", now)
-			_, _ = s.repo.UpdateTransactionStatus(ctx, nil, existingTx, domain.StatusProcessing)
+		if hasApproved {
+			return nil, domain.ErrIntentAlreadyApproved
 		}
+		return pi, nil
 	}
 
-	// 5. Atomic DB Insertion (PaymentIntent + Transaction PENDING + Audit Event)
-	var (
-		pi      *domain.PaymentIntent
-		txModel *domain.Transaction
-	)
+	piID := uuid.New()
+	pi, err = domain.NewPaymentIntent(piID, req.MerchantID, req.OrderReference, amount, currency, nil, req.CorrelationID, now)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.repo.CreatePaymentIntent(ctx, tx, pi); err != nil {
+		return nil, err
+	}
+	return pi, nil
+}
 
-	err = s.repo.WithTx(ctx, func(tx any) error {
-		var err error
-		pi, err = s.repo.GetPaymentIntentByOrderRef(ctx, req.MerchantID, req.OrderReference)
+func (s *Service) createInitialTransaction(
+	ctx context.Context,
+	req ProcessRequest,
+	amount domain.Amount,
+	currency string,
+	incomingHash, cardBIN, cardLast4 string,
+	now time.Time,
+) (*domain.Transaction, error) {
+	var txModel *domain.Transaction
+	err := s.repo.WithTx(ctx, func(tx any) error {
+		pi, err := s.resolvePaymentIntent(ctx, tx, req, amount, currency, now)
 		if err != nil {
 			return err
-		}
-		if pi == nil {
-			piID := uuid.New()
-			pi, err = domain.NewPaymentIntent(piID, req.MerchantID, req.OrderReference, amount, currency, nil, req.CorrelationID, now)
-			if err != nil {
-				return err
-			}
-			if err := s.repo.CreatePaymentIntent(ctx, tx, pi); err != nil {
-				return err
-			}
 		}
 
 		txID := uuid.New()
@@ -157,13 +204,12 @@ func (s *Service) ProcessPayment(ctx context.Context, req ProcessRequest) (*Proc
 		return nil, err
 	}
 
-	// 6. Transition to PROCESSING
-	nowProcessing := time.Now().UTC()
-	if err := txModel.TransitionTo(domain.StatusProcessing, nowProcessing); err != nil {
+	// Move to PROCESSING
+	nowProc := time.Now().UTC()
+	if err := txModel.TransitionTo(domain.StatusProcessing, nowProc); err != nil {
 		return nil, err
 	}
-	_, err = s.repo.UpdateTransactionStatus(ctx, nil, txModel, domain.StatusPending)
-	if err != nil {
+	if _, err := s.repo.UpdateTransactionStatus(ctx, nil, txModel, domain.StatusPending); err != nil {
 		return nil, err
 	}
 
@@ -175,11 +221,19 @@ func (s *Service) ProcessPayment(ctx context.Context, req ProcessRequest) (*Proc
 		FromStatus:    &fromPending,
 		ToStatus:      &toProcessing,
 		CorrelationID: req.CorrelationID,
-		OccurredAt:    nowProcessing,
+		OccurredAt:    nowProc,
 	}
 	_ = s.repo.CreateTransactionEvent(ctx, nil, eventProcessing)
 
-	// 7. Secure Acquirer Authorization with context.WithoutCancel (Anti-Client-Disconnect protection)
+	return txModel, nil
+}
+
+func (s *Service) executeAcquirerCall(
+	ctx context.Context,
+	txModel *domain.Transaction,
+	req ProcessRequest,
+	currency string,
+) (*ProcessResponse, error) {
 	detachedCtx := context.WithoutCancel(ctx)
 	startAcq := time.Now()
 
@@ -201,7 +255,6 @@ func (s *Service) ProcessPayment(ctx context.Context, req ProcessRequest) (*Proc
 	latencyMs := int(time.Since(startAcq).Milliseconds())
 	nowCompleted := time.Now().UTC()
 
-	// 8. Record Acquirer Attempt Event
 	attemptEvent := &domain.TransactionEvent{
 		TransactionID: txModel.ID,
 		EventType:     domain.EventAcquirerAttempt,
@@ -215,10 +268,8 @@ func (s *Service) ProcessPayment(ctx context.Context, req ProcessRequest) (*Proc
 	}
 	_ = s.repo.CreateTransactionEvent(detachedCtx, nil, attemptEvent)
 
-	// 9. Status Resolution & Final Transition
 	if acqErr != nil {
 		if errors.Is(acqErr, domain.ErrAcquirerUnknownResult) {
-			// Leave in PROCESSING, return 202 outcome
 			return mapToProcessResponse(txModel, req.OrderReference, req.Amount, currency, false), domain.ErrAcquirerUnknownResult
 		}
 		_ = txModel.MarkFailed("acquirer_failure", acqErr.Error(), nowCompleted)
@@ -226,14 +277,19 @@ func (s *Service) ProcessPayment(ctx context.Context, req ProcessRequest) (*Proc
 		return mapToProcessResponse(txModel, req.OrderReference, req.Amount, currency, false), acqErr
 	}
 
-	if acqResp.Status == "APPROVED" {
+	switch acqResp.Status {
+	case "APPROVED":
 		_ = txModel.MarkApproved(acqResp.AuthorizationCode, acqResp.Code, "Approved by acquirer", nowCompleted)
-	} else if acqResp.Status == "DECLINED" {
+	case "DECLINED":
 		_ = txModel.MarkDeclined(domain.DeclineSourceAcquirer, acqResp.Code, "Declined by acquirer", nowCompleted)
-	} else {
+	default:
 		_ = txModel.MarkFailed(acqResp.Code, "Failed by acquirer", nowCompleted)
 	}
-	_, _ = s.repo.UpdateTransactionStatus(detachedCtx, nil, txModel, domain.StatusProcessing)
+	if _, err := s.repo.UpdateTransactionStatus(detachedCtx, nil, txModel, domain.StatusProcessing); err != nil {
+		_ = txModel.MarkFailed("update_failed", err.Error(), nowCompleted)
+		_, _ = s.repo.UpdateTransactionStatus(detachedCtx, nil, txModel, domain.StatusProcessing)
+		return nil, err
+	}
 
 	fromProc := domain.StatusProcessing
 	toFinal := txModel.Status

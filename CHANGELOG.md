@@ -4,6 +4,17 @@ Todos los cambios notables en este proyecto se documentarán en este archivo.
 
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
+## [0.10.0] - 2026-10-24
+
+### Agregado
+- **Orquestación Docker Compose Unificada (Task 09):** Archivo `docker-compose.yml` que levanta la arquitectura completa con un solo comando (`postgres:16-alpine`, `acquirer-mock`, `payments-api` y `web-dashboard`), con red unificada (`haulmer-payments-net`), volúmenes persistentes (`haulmer-postgres-data`), dependencias condicionales (`service_healthy`) y plantilla de entorno en `.env.example`.
+- **Automatización & Makefile Integral:** Interfaz de control estandarizada en `Makefile` con comandos limpios para ciclo de vida (`up`, `down`, `logs`, `status`), pruebas (`test`, `test-e2e`), análisis de calidad y complejidad (`complexity`), escaneo de vulnerabilidades (`security`), análisis estático (`lint`) y formateo (`format`).
+- **Control de Complejidad Ciclomática y Cognitiva:** Verificación estricta de mantenibilidad de código con `gocyclo` (complejidad ciclomática <= 15) y `gocognit` (complejidad cognitiva <= 20) en servicios Go.
+- **Pipeline de Integración Continua (CI):** Flujo de GitHub Actions en `.github/workflows/ci.yml` con trabajos paralelos optimizados (`backend-ci` y `frontend-ci`) que ejecutan tests con `-race`, chequeos de complejidad, linters y escaneo de vulnerabilidades sin sobrecosto de Docker.
+- **Suite Automatizada de Pruebas E2E (`scripts/test-e2e.sh`):** Cobertura determinista de los 7 escenarios bancarios clave contra el entorno orquestado: pagos aprobados, rechazo por fondos insuficientes (HTTP 402), reintentos automáticos ante 503, replay idempotente idéntico (HTTP 200), colisión de clave de idempotencia (HTTP 409), garantía física anti-doble cobro en orden ya pagada (HTTP 409 `intent_already_approved`), y aislamiento multi-tenant.
+- **Escaneo de Seguridad & CVEs:** Auditoría de vulnerabilidades con `govulncheck` en dependencias Go y `npm audit` en el panel web, garantizando 0 vulnerabilidades conocidas.
+- **Documentación Operativa:** Actualización exhaustiva de `web-dashboard/README.md` documentando la arquitectura SSR, Server Actions, variables de entorno y catálogo exacto de tarjetas deterministas.
+
 ## [0.9.0] - 2026-10-24
 
 ### Agregado

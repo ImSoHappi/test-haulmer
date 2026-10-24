@@ -53,6 +53,11 @@ func NewAuthorizationHandler(store *storage.MemoryStore, opts ...Option) *Author
 
 // RegisterRoutes registers the mock endpoints to a standard http.ServeMux.
 func (h *AuthorizationHandler) RegisterRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"UP"}`))
+	})
 	mux.HandleFunc("POST /authorizations", h.HandleAuthorize)
 	mux.HandleFunc("GET /authorizations/{reference_id}", h.HandleGetAuthorization)
 }

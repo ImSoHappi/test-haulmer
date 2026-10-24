@@ -35,10 +35,12 @@ type Client struct {
 	client *http.Client
 }
 
-// NewClient constructs a new resilient acquirer client with defaults applied.
-func NewClient(cfg ClientConfig) *Client {
+// NewClient constructs a new resilient acquirer client.
+// Returns an error if BaseURL is empty (fail-fast, eliminating magic defaults).
+func NewClient(cfg ClientConfig) (*Client, error) {
+	cfg.BaseURL = strings.TrimSpace(cfg.BaseURL)
 	if cfg.BaseURL == "" {
-		cfg.BaseURL = "http://localhost:8081"
+		return nil, errors.New("acquirer: BaseURL is required")
 	}
 	cfg.BaseURL = strings.TrimRight(cfg.BaseURL, "/")
 
@@ -51,7 +53,7 @@ func NewClient(cfg ClientConfig) *Client {
 	if cfg.InitialBackoff <= 0 {
 		cfg.InitialBackoff = 200 * time.Millisecond
 	}
-	if cfg.MaxRetries < 0 {
+	if cfg.MaxRetries <= 0 {
 		cfg.MaxRetries = 2
 	}
 
@@ -69,7 +71,7 @@ func NewClient(cfg ClientConfig) *Client {
 	return &Client{
 		config: cfg,
 		client: httpClient,
-	}
+	}, nil
 }
 
 // Authorize attempts to authorize a payment through the acquirer.
@@ -85,55 +87,61 @@ func (c *Client) Authorize(ctx context.Context, req AuthorizeRequest) (*Acquirer
 
 	for attempt := 0; attempt <= c.config.MaxRetries; attempt++ {
 		if attempt > 0 {
-			backoff := c.calculateBackoff(attempt)
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(backoff):
+			if err := c.waitForRetry(ctx, attempt); err != nil {
+				return nil, err
 			}
 		}
 
 		resp, isTimeout, err := c.doPost(ctx, url, bodyBytes, req.CorrelationID)
 		if isTimeout {
-			// On-demand reconciliation on timeout
 			return c.reconcileTimeout(ctx, req.ReferenceID, req.CorrelationID)
 		}
-
 		if err != nil {
-			// Transient network failure
 			if attempt < c.config.MaxRetries {
 				continue
 			}
 			return nil, domain.ErrAcquirerUnavailable
 		}
 
-		// 503 Service Unavailable: retry transient outage
-		if resp.StatusCode == http.StatusServiceUnavailable {
-			_ = resp.Body.Close()
+		authResp, retry, err := c.parseAuthorizeResponse(resp)
+		if retry {
 			if attempt < c.config.MaxRetries {
 				continue
 			}
 			return nil, domain.ErrAcquirerUnavailable
 		}
-
-		// 200 OK: Deterministic business response (APPROVED, DECLINED, insufficient_funds, etc.)
-		// MUST NEVER BE RETRIED.
-		if resp.StatusCode == http.StatusOK {
-			var authResp AcquirerResponse
-			if err := json.NewDecoder(resp.Body).Decode(&authResp); err != nil {
-				_ = resp.Body.Close()
-				return nil, domain.ErrAcquirerUnexpected
-			}
-			_ = resp.Body.Close()
-			return &authResp, nil
-		}
-
-		// Client errors (400, 422, etc.) or other unexpected statuses: NEVER retry
-		_ = resp.Body.Close()
-		return nil, domain.ErrAcquirerUnexpected
+		return authResp, err
 	}
 
 	return nil, domain.ErrAcquirerUnavailable
+}
+
+func (c *Client) waitForRetry(ctx context.Context, attempt int) error {
+	backoff := c.calculateBackoff(attempt)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(backoff):
+		return nil
+	}
+}
+
+func (c *Client) parseAuthorizeResponse(resp *http.Response) (*AcquirerResponse, bool, error) {
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusServiceUnavailable {
+		return nil, true, nil
+	}
+
+	if resp.StatusCode == http.StatusOK {
+		var authResp AcquirerResponse
+		if err := json.NewDecoder(resp.Body).Decode(&authResp); err != nil {
+			return nil, false, domain.ErrAcquirerUnexpected
+		}
+		return &authResp, false, nil
+	}
+
+	return nil, false, domain.ErrAcquirerUnexpected
 }
 
 // GetAuthorization reconciles the status of a transaction with the acquirer.
