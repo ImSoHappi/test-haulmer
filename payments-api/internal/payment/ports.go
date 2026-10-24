@@ -1,7 +1,9 @@
-package processpayment
+package payment
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 
 	"github.com/ImSoHappi/test-haulmer/payments-api/internal/acquirer"
 	"github.com/ImSoHappi/test-haulmer/payments-api/internal/domain"
@@ -17,6 +19,9 @@ type Repository interface {
 	CreateTransaction(ctx context.Context, tx any, t *domain.Transaction) error
 	CreateTransactionEvent(ctx context.Context, tx any, e *domain.TransactionEvent) error
 	UpdateTransactionStatus(ctx context.Context, tx any, t *domain.Transaction, fromStatus domain.TransactionStatus) (bool, error)
+	GetTransactionByID(ctx context.Context, id uuid.UUID) (*domain.Transaction, error)
+	ListEventsByTransactionID(ctx context.Context, txID uuid.UUID) ([]*domain.TransactionEvent, error)
+	ListTransactions(ctx context.Context, filter Filter) ([]*domain.Transaction, int, error)
 }
 
 // AcquirerClient defines the secondary banking client required to authorize charges.

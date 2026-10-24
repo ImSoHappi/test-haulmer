@@ -1,4 +1,4 @@
-package processpayment
+package payment
 
 import (
 	"context"
@@ -12,14 +12,21 @@ import (
 	"github.com/ImSoHappi/test-haulmer/payments-api/internal/domain"
 )
 
-// Service coordinates the synchronous card payment processing flow.
+const (
+	// DefaultLimit is applied when requested limit is <= 0.
+	DefaultLimit = 20
+	// MaxLimit caps pagination to prevent heavy memory allocations.
+	MaxLimit = 50
+)
+
+// Service coordinates all payment lifecycle operations: processing, retrieving, and listing.
 type Service struct {
 	repo         Repository
 	acquirer     AcquirerClient
 	maxAmountCLP int64
 }
 
-// NewService constructs a new payment processing service.
+// NewService constructs a unified payment service.
 func NewService(repo Repository, acquirer AcquirerClient, maxAmountCLP int64) *Service {
 	return &Service{
 		repo:         repo,
@@ -29,7 +36,7 @@ func NewService(repo Repository, acquirer AcquirerClient, maxAmountCLP int64) *S
 }
 
 // ProcessPayment orchestrates validation, idempotency, persistence, and banking authorization.
-func (s *Service) ProcessPayment(ctx context.Context, req Request) (*Response, error) {
+func (s *Service) ProcessPayment(ctx context.Context, req ProcessRequest) (*ProcessResponse, error) {
 	// 1. Merchant Validation (Early gate / Anti-Carding / Zero DB waste)
 	merchant, err := s.repo.GetMerchantByID(ctx, req.MerchantID)
 	if err != nil {
@@ -92,7 +99,7 @@ func (s *Service) ProcessPayment(ctx context.Context, req Request) (*Response, e
 			return nil, domain.ErrIdempotencyConflict
 		}
 		if existingTx.Status.IsTerminal() {
-			return mapToResponse(existingTx, req.OrderReference, req.Amount, currency, true), nil
+			return mapToProcessResponse(existingTx, req.OrderReference, req.Amount, currency, true), nil
 		}
 		if existingTx.Status == domain.StatusProcessing {
 			if time.Since(existingTx.CreatedAt) < 5*time.Minute {
@@ -212,11 +219,11 @@ func (s *Service) ProcessPayment(ctx context.Context, req Request) (*Response, e
 	if acqErr != nil {
 		if errors.Is(acqErr, domain.ErrAcquirerUnknownResult) {
 			// Leave in PROCESSING, return 202 outcome
-			return mapToResponse(txModel, req.OrderReference, req.Amount, currency, false), domain.ErrAcquirerUnknownResult
+			return mapToProcessResponse(txModel, req.OrderReference, req.Amount, currency, false), domain.ErrAcquirerUnknownResult
 		}
 		_ = txModel.MarkFailed("acquirer_failure", acqErr.Error(), nowCompleted)
 		_, _ = s.repo.UpdateTransactionStatus(detachedCtx, nil, txModel, domain.StatusProcessing)
-		return mapToResponse(txModel, req.OrderReference, req.Amount, currency, false), acqErr
+		return mapToProcessResponse(txModel, req.OrderReference, req.Amount, currency, false), acqErr
 	}
 
 	if acqResp.Status == "APPROVED" {
@@ -242,11 +249,115 @@ func (s *Service) ProcessPayment(ctx context.Context, req Request) (*Response, e
 	}
 	_ = s.repo.CreateTransactionEvent(detachedCtx, nil, eventFinal)
 
-	return mapToResponse(txModel, req.OrderReference, req.Amount, currency, false), nil
+	return mapToProcessResponse(txModel, req.OrderReference, req.Amount, currency, false), nil
 }
 
-func mapToResponse(t *domain.Transaction, orderRef string, amount int64, currency string, isReplayed bool) *Response {
-	return &Response{
+// GetPayment retrieves transaction details and audit event timeline with tenant isolation.
+func (s *Service) GetPayment(ctx context.Context, req GetRequest) (*GetResponse, error) {
+	txUUID, err := uuid.Parse(req.TransactionID)
+	if err != nil {
+		return nil, domain.ErrTransactionNotFound
+	}
+
+	tx, err := s.repo.GetTransactionByID(ctx, txUUID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get transaction: %w", err)
+	}
+	if tx == nil || tx.MerchantID != req.MerchantID {
+		// Strict multi-tenant protection: do not leak transaction existence across merchants
+		return nil, domain.ErrTransactionNotFound
+	}
+
+	events, err := s.repo.ListEventsByTransactionID(ctx, txUUID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list transaction events: %w", err)
+	}
+
+	eventItems := make([]EventItem, len(events))
+	for i, e := range events {
+		eventItems[i] = EventItem{
+			ID:        fmt.Sprintf("%d", e.ID),
+			EventType: string(e.EventType),
+			Payload:   e.Details,
+			CreatedAt: e.OccurredAt,
+		}
+	}
+
+	return &GetResponse{
+		ID:                tx.ID.String(),
+		PaymentIntentID:   tx.PaymentIntentID.String(),
+		MerchantID:        tx.MerchantID,
+		IdempotencyKey:    tx.IdempotencyKey,
+		Status:            string(tx.Status),
+		CardBIN:           tx.CardBIN,
+		CardLast4:         tx.CardLast4,
+		DeclineSource:     string(tx.DeclineSource),
+		ResultCode:        tx.ResultCode,
+		ResultMessage:     tx.ResultMessage,
+		AuthorizationCode: tx.AuthorizationCode,
+		CorrelationID:     tx.CorrelationID,
+		CreatedAt:         tx.CreatedAt,
+		UpdatedAt:         tx.UpdatedAt,
+		CompletedAt:       tx.CompletedAt,
+		Events:            eventItems,
+	}, nil
+}
+
+// ListPayments retrieves transactions matching the merchant and filter criteria.
+func (s *Service) ListPayments(ctx context.Context, req ListRequest) (*ListResponse, error) {
+	limit := req.Limit
+	if limit <= 0 {
+		limit = DefaultLimit
+	} else if limit > MaxLimit {
+		limit = MaxLimit
+	}
+
+	offset := max(0, req.Offset)
+
+	merchantID := req.MerchantID
+	filter := Filter{
+		MerchantID: &merchantID,
+		Status:     req.Status,
+		Limit:      limit,
+		Offset:     offset,
+	}
+
+	transactions, totalCount, err := s.repo.ListTransactions(ctx, filter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list transactions: %w", err)
+	}
+
+	items := make([]ListItem, len(transactions))
+	for i, t := range transactions {
+		items[i] = ListItem{
+			ID:                t.ID.String(),
+			PaymentIntentID:   t.PaymentIntentID.String(),
+			MerchantID:        t.MerchantID,
+			IdempotencyKey:    t.IdempotencyKey,
+			Status:            string(t.Status),
+			CardBIN:           t.CardBIN,
+			CardLast4:         t.CardLast4,
+			DeclineSource:     string(t.DeclineSource),
+			ResultCode:        t.ResultCode,
+			ResultMessage:     t.ResultMessage,
+			AuthorizationCode: t.AuthorizationCode,
+			CorrelationID:     t.CorrelationID,
+			CreatedAt:         t.CreatedAt,
+			UpdatedAt:         t.UpdatedAt,
+			CompletedAt:       t.CompletedAt,
+		}
+	}
+
+	return &ListResponse{
+		Items:      items,
+		TotalCount: totalCount,
+		Limit:      limit,
+		Offset:     offset,
+	}, nil
+}
+
+func mapToProcessResponse(t *domain.Transaction, orderRef string, amount int64, currency string, isReplayed bool) *ProcessResponse {
+	return &ProcessResponse{
 		TransactionID:     t.ID.String(),
 		PaymentIntentID:   t.PaymentIntentID.String(),
 		MerchantID:        t.MerchantID,

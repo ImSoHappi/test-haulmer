@@ -450,8 +450,8 @@ CREATE INDEX ix_events_tx ON transaction_events (transaction_id, id);
 
 ```json
 {
-  "merchant_id": "m_1001",
-  "order_reference": "ORD-2026-000123",
+  "merchant_id": "1001",
+  "order_reference": "KD0877",
   "amount": 25990,
   "currency": "CLP",
   "card": {
@@ -470,8 +470,8 @@ CREATE INDEX ix_events_tx ON transaction_events (transaction_id, id);
 {
   "id": "0192f3a4-7c1e-7a55-9d0e-3b1f6a2c8e11",
   "payment_intent_id": "0192f3a4-7c1d-7b02-8a41-5c9d2e7f1a30",
-  "merchant_id": "m_1001",
-  "order_reference": "ORD-2026-000123",
+  "merchant_id": "1001",
+  "order_reference": "KD0877",
   "amount": 25990,
   "currency": "CLP",
   "status": "APPROVED",

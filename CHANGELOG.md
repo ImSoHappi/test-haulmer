@@ -4,6 +4,18 @@ Todos los cambios notables en este proyecto se documentarán en este archivo.
 
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
+## [0.8.0] - 2026-10-24
+
+### Agregado
+- **Adaptador Primario HTTP (Task 07):** Capa HTTP plana en `internal/http/` sobre `net/http.ServeMux` de Go 1.22+ sin dependencias externas (`POST /v1/payments`, `GET /v1/payments/{id}`, `GET /v1/payments`).
+- **Manejo Centralizado de Errores:** Serializador unificado `respondError` mapeando el catálogo de dominio a formato RFC 9457 (`application/problem+json`) con trazabilidad `X-Correlation-ID`.
+- **Middlewares Globales:** Inyección de correlación (`Correlation`), logging estructurado PCI-DSS (`StructuredLogger` con `slog`) y captura de pánicos (`Recovery`).
+- **Configuración y Composition Root:** Módulo `internal/config` con validación estricta fail-fast para todas las variables de entorno obligatorias (`PORT`, `DATABASE_URL`, `ACQUIRER_BASE_URL`, `PAYMENT_MAX_AMOUNT_CLP`, `LOG_LEVEL`), eliminando valores por defecto mágicos; punto de entrada `cmd/api/main.go` con apagado ordenado (10s) y `Dockerfile` multi-stage.
+
+### Cambiado
+- **Capa de Aplicación Unificada:** Consolidación de los casos de uso fragmentados (`processpayment`, `getpayment`, `listpayments`) en un único paquete limpio `internal/payment/` con `PaymentService` cohesivo, simplificando la inyección en el handler HTTP y el Composition Root.
+- **Estandarización de Identificadores:** Comercios semilla actualizados a IDs numéricos (`1001`, `1002`) y `order_reference` a formato de 6 caracteres sin prefijos (`KD0877`).
+
 ## [0.7.0] - 2026-10-24
 
 ### Agregado

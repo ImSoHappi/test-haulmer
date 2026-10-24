@@ -23,14 +23,11 @@ payments-api/
 │   │   ├── transaction_event.go            # Registro inmutable de eventos de auditoría
 │   │   ├── status.go                       # Máquina de estados (PENDING, PROCESSING, APPROVED, etc.)
 │   │   └── errors.go                       # Errores de dominio tipados (RFC 9457)
-│   ├── app/                                # Casos de uso (Vertical Slices)
-│   │   ├── processpayment/                 # Caso de uso: Procesar Pago
-│   │   │   ├── usecase.go                  # Orquestación: idempotencia, bloqueo y llamada a adquirente
-│   │   │   ├── dto.go                      # DTOs de entrada y salida
-│   │   │   ├── ports.go                    # Interfaces requeridas (Repository, AcquirerClient)
-│   │   │   └── usecase_test.go             # Pruebas unitarias de flujo
-│   │   ├── getpayment/                     # Caso de uso: Consultar Pago por ID
-│   │   └── listpayments/                   # Caso de uso: Listar Pagos con filtros y paginación
+│   ├── payment/                            # Capa de aplicación unificada (orquestación, casos de uso, DTOs y puertos)
+│   │   ├── dto.go                          # DTOs de entrada y salida (Process, Get, List, Filter)
+│   │   ├── ports.go                        # Interfaces secundarias (Repository, AcquirerClient)
+│   │   ├── service.go                      # Servicio de pago unificado (ProcessPayment, GetPayment, ListPayments)
+│   │   └── service_test.go                 # Pruebas unitarias de aplicación con mocks puros Go
 │   ├── http/                               # Adaptador de entrada: router, handlers HTTP, middleware
 │   ├── postgres/                           # Adaptador de salida: BD (pgx/v5, sqlc, migraciones)
 │   │   ├── migrator.go                     # Runner de migraciones con golang-migrate
@@ -38,7 +35,7 @@ payments-api/
 │   └── acquirer/                           # Adaptador de salida: cliente HTTP hacia acquirer-mock
 ├── migrations/                             # Scripts SQL DDL versionados (Up y Down)
 │   ├── 000001_init_schema.up.sql           # Tablas e índices físicos de concurrencia
-│   ├── 000002_seed_merchants.up.sql        # Comercios de prueba (m_1001, m_1002)
+│   ├── 000002_seed_merchants.up.sql        # Comercios de prueba (1001, 1002)
 │   └── migrations.go                       # Sistema de archivos embebido (embed.FS)
 ├── Dockerfile                              # Multi-stage build estático
 ├── README.md                               # Documentación del servicio

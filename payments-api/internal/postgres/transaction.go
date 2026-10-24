@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/ImSoHappi/test-haulmer/payments-api/internal/app/listpayments"
 	"github.com/ImSoHappi/test-haulmer/payments-api/internal/domain"
+	"github.com/ImSoHappi/test-haulmer/payments-api/internal/payment"
 )
 
 // ComputePayloadHash calculates a deterministic SHA-256 hash across canonical payment parameters.
@@ -124,7 +124,7 @@ func (r *Repository) GetTransactionByID(ctx context.Context, id uuid.UUID) (*dom
 }
 
 // ListTransactions retrieves transactions matching the optional filter criteria, ordered by created_at DESC.
-func (r *Repository) ListTransactions(ctx context.Context, filter listpayments.Filter) ([]*domain.Transaction, int, error) {
+func (r *Repository) ListTransactions(ctx context.Context, filter payment.Filter) ([]*domain.Transaction, int, error) {
 	if filter.Limit <= 0 {
 		filter.Limit = 20
 	}
