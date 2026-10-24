@@ -4,6 +4,16 @@ Todos los cambios notables en este proyecto se documentarán en este archivo.
 
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
+## [0.7.0] - 2026-10-24
+
+### Agregado
+- **Casos de Uso de Aplicación & Orquestación (Task 06):** Implementación de la capa de orquestación de aplicación en `payments-api/internal/app/` con paquetes colocalizados (`processpayment/`, `getpayment/`, `listpayments/`), desacoplada de HTTP y SQL.
+- **Flujo Síncrono de Procesamiento (`ProcessPaymentUseCase`):** Validación temprana de comercios activos, verificación de monto máximo configurable (`PAYMENT_MAX_AMOUNT_CLP`), hash SHA-256 de integridad de parámetros e inserción atómica ACID de intención, transacción inicial y evento de auditoría.
+- **Manejo Estricto de Idempotencia y Replay:** Detección de colisiones de clave con payload alterado (`domain.ErrIdempotencyConflict`), reproducción inmediata de transacciones terminales previas (`IsReplayed = true`) sin cobro duplicado, y recuperación automática de transacciones huérfanas en `PROCESSING` con más de 5 minutos de antigüedad.
+- **Protección Anti-Desconexión:** Invocación bancaria y persistencia desacopladas de cancelaciones de cliente mediante `context.WithoutCancel(ctx)` para prevenir transacciones en el limbo ante cierres de ventana del comprador.
+- **Consulta con Aislamiento Multi-Tenant (`GetPaymentUseCase`):** Consulta protegida de transacciones y línea de tiempo completa de eventos de auditoría, previniendo fuga de información entre diferentes comercios.
+- **Listado y Paginación Filtrada (`ListPaymentsUseCase`):** Soporte de filtrado por comercio y estado (`domain.TransactionStatus`) con paginación robusta acotada (`LIMIT` / `OFFSET`).
+
 ## [0.6.0] - 2026-10-23
 
 ### Agregado

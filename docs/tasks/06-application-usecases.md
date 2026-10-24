@@ -2,7 +2,7 @@
 
 - **Servicio:** `payments-api`
 - **Dependencias:** `03-domain-core`, `04-persistence-adapters`, `05-acquirer-client-resilience`
-- **Estado:** PENDING
+- **Estado:** COMPLETED (v0.7.0)
 - **Trazabilidad:** PRD §R1–R6, §R10–R15 | Technical Design §5.2, §5.3, §7.1, §7.2, §10.1
 
 ---
@@ -12,19 +12,22 @@ Implementar la capa de aplicación que orquesta el flujo completo de cobro sínc
 
 ---
 
-## 2. Archivos Afectados
-- `crear`: `payments-api/internal/app/processpayment/usecase.go`
-- `crear`: `payments-api/internal/app/processpayment/dto.go`
-- `crear`: `payments-api/internal/app/processpayment/ports.go`
-- `crear`: `payments-api/internal/app/processpayment/usecase_test.go`
-- `crear`: `payments-api/internal/app/getpayment/usecase.go`
-- `crear`: `payments-api/internal/app/getpayment/dto.go`
-- `crear`: `payments-api/internal/app/getpayment/ports.go`
-- `crear`: `payments-api/internal/app/getpayment/usecase_test.go`
-- `crear`: `payments-api/internal/app/listpayments/usecase.go`
-- `crear`: `payments-api/internal/app/listpayments/dto.go`
-- `crear`: `payments-api/internal/app/listpayments/ports.go`
-- `crear`: `payments-api/internal/app/listpayments/usecase_test.go`
+## 2. Archivos Implementados
+- `payments-api/internal/app/processpayment/`:
+  - `dto.go` (Request y Response de cobro)
+  - `repository.go` (puerto secundario `Repository` y contrato de `AcquirerClient`)
+  - `service.go` (orquestador de cobro, idempotencia, replay y llamada externa resiliente)
+  - `service_test.go` (suite de pruebas unitarias exhaustivas con mocks)
+- `payments-api/internal/app/getpayment/`:
+  - `dto.go` (Request, Response y EventItem de auditoría)
+  - `repository.go` (puerto secundario `Repository`)
+  - `service.go` (consulta con aislamiento multi-tenant y timeline de eventos)
+  - `service_test.go` (pruebas unitarias con aislamiento multi-tenant)
+- `payments-api/internal/app/listpayments/`:
+  - `dto.go` (Request, Response, Item y Filter)
+  - `repository.go` (puerto secundario `Repository`)
+  - `service.go` (listado con filtros y paginación acotada)
+  - `service_test.go` (pruebas unitarias de paginación y filtros)
 
 ---
 
@@ -68,10 +71,10 @@ Implementar la capa de aplicación que orquesta el flujo completo de cobro sínc
 ---
 
 ## 5. Criterios de Aceptación (Definition of Done)
-- [ ] Orquestación desacoplada: el caso de uso no conoce SQL ni HTTP.
-- [ ] La clave de idempotencia con diferente payload es detectada y rechazada.
-- [ ] Si el cliente aborta la conexión, la transacción concluye su ciclo sin quedar en el limbo.
-- [ ] Cobertura de pruebas unitarias sobre casos de uso $\ge 90\%$.
+- [x] Orquestación desacoplada: el caso de uso no conoce SQL ni HTTP.
+- [x] La clave de idempotencia con diferente payload es detectada y rechazada.
+- [x] Si el cliente aborta la conexión, la transacción concluye su ciclo sin quedar en el limbo.
+- [x] Cobertura de pruebas unitarias sobre casos de uso $\ge 90\%$.
 
 ---
 
