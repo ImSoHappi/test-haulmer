@@ -108,6 +108,43 @@ Este script recorre automáticamente los 7 escenarios anteriores realizando peti
 
 Al abordar este desafío, mi objetivo principal no fue solo construir un servicio que procesara pagos, sino diseñar una solución de grado bancario que otorgue **certeza y confianza absoluta**: que garantice matemáticamente que jamás ocurrirá un cobro doble, que sea altamente tolerante a caídas de red y que cualquier persona (desarrollador, soporte o negocio) pueda auditar cada paso con total transparencia.
 
+### Diagrama de Componentes del MVP
+
+El ecosistema está compuesto por 4 servicios desacoplados y contenerizados que interactúan bajo una red privada unificada (`haulmer-payments-net`):
+
+```mermaid
+flowchart LR
+    subgraph ClientLayer ["1. Clientes & Comercios"]
+        Browser["Navegador / Evaluador"]
+        Checkout["Checkout / Comercios"]
+    end
+
+    subgraph WebLayer ["2. web-dashboard (:3000)"]
+        Dashboard["Panel SSR & Sandbox\nNext.js 15 + Server Actions"]
+    end
+
+    subgraph CoreLayer ["3. payments-api (:8080)"]
+        direction TB
+        HTTP["Adaptador HTTP (RFC 9457)"]
+        Domain["Dominio Puro & Hexagonal (Go)"]
+        HTTP --> Domain
+    end
+
+    subgraph StorageLayer ["4. PostgreSQL 16 (:5432)"]
+        DB[("PostgreSQL 16\nÍndices Parciales Únicos\nAuditoría Forense")]
+    end
+
+    subgraph AcquirerLayer ["5. acquirer-mock (:8081)"]
+        Mock["Acquirer Mock (Go)\nSimulador Determinista\nReconciliación On-Demand"]
+    end
+
+    Browser --> Dashboard
+    Dashboard -->|POST /v1/payments\nGET /v1/payments| HTTP
+    Checkout -->|POST /v1/payments| HTTP
+    Domain -->|Atomic Tx (pgxpool)| DB
+    Domain -->|POST /authorizations\nGET /authorizations/{ref}| Mock
+```
+
 ---
 
 ### 4.1. El Punto de Partida: Definición de Producto y Requerimientos (PRD)

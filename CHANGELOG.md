@@ -16,7 +16,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
   - Banner de orden comercial en `/payments/[id]` y botón de acción rápida *"Probar en Sandbox con estos datos"* para precarga instantánea en el simulador mediante parámetros URL.
   - Alerta de precarga interactiva en `/sandbox` con opción de limpiar o probar de inmediato.
 - **Síntesis de Documentación Maestra:**
-  - `README.md`: Síntesis de supuestos y decisiones técnicas (Sección 4.2), compactación de tabla de campos especiales (Sección 4.3) y rediseño lineal del diagrama Mermaid de arquitectura objetivo (Sección 8).
+  - `README.md`: Incorporación de diagrama de componentes de arquitectura del MVP (Sección 4), síntesis de supuestos y decisiones técnicas (Sección 4.2), compactación de tabla de campos especiales (Sección 4.3) y rediseño lineal del diagrama Mermaid de arquitectura objetivo (Sección 8).
   - Limpieza de documentación: consolidación final de deuda técnica y eliminación de backlog temporal al encontrarse 100% resuelto.
 
 ## [0.11.0] - 2026-10-24
